@@ -1,0 +1,10 @@
+name = "combat"
+# ALWAYS-ON (see [engine].always_reflexes / offline_reflexes): a power-bash can floor us in ANY
+# state and even with the engine off, so standing back up must not be gated by the hunting states.
+# The guard (`knocked_down`) is self-clearing, so it never blocks the state machine when we're up.
+reflex = [
+  { when = "knocked_down", do = "stand_up", priority = 250 },
+  # caster leader (성직): nuke the opponent with 벼락 for extra damage while a fight is live. The
+  # server drives the melee rounds; this adds the spell on top, throttled + MP-gated in the guard.
+  { when = "battle_spell_due", do = "cast_battle_spell", priority = 180 },
+]

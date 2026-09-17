@@ -1,0 +1,17 @@
+name = "ironskin"
+# ALWAYS-ON (see [engine].always_reflexes). 철면사냥 danger can arrive in ANY state — a battle can
+# start while resting/travelling, and 철면 can fade mid-fight — so these must not be gated by the
+# hunting states. Both are LEADER-side and self-clearing (role + condition gated), so they stay
+# silent for the supporter and outside 철면 zones. The supporter's half of the protocol is the
+# generic `support` bundle (has_spell_request -> cast_requested_spell): it just casts whatever the
+# leader spoke, so it never inspects the leader's 철면 status (that lag caused the double-cast).
+reflex = [
+  # leader: 철면 lapsed mid-fight and can't be renewed in time -> flee before lethal physical
+  # damage. Above everything else — escaping a doomed fight beats attacking or sipping in it.
+  { when = "ironskin_emergency",   do = "ironskin_flee",    priority = 220 },
+  # leader: ask the supporter (말 "철면!") to (re)cast when 철면 is down and a fight is real. Above
+  # the 연타 combo (200) so a needed re-protection preempts continuing the multi-strike.
+  { when = "ironskin_request_due", do = "request_ironskin", priority = 210 },
+]
+# NOTE: the supporter's chase-a-fleeing-leader reflex is GENERAL (any hunt) and lives in the
+# `support` bundle, not here — a leader can flee any fight, not only in a 철면 zone.

@@ -1,0 +1,51 @@
+kind    = "blind"
+initial = "recall"
+
+# BLIND recovery ("당신의 눈이 멀었습니다!"). The arbiter force-enters this from ANY workflow the
+# moment state.blind is set (death still wins over it). While blinded the ONLY action that works
+# is 귀환 — so recall to the anchor (중앙 광장), walk 동 to the 치료소, "장님치 부탁" to be cured,
+# then hand back to travel to walk back to the hunt zone and resume.
+
+[state.recall]
+arm      = ["survival"]
+on_enter = ["blind_recall"]        # 귀환 — the only thing that works while blind
+step     = "blind_recall_watch"    # re-send 귀환 ONLY if a fail line came; else wait for confirm
+transition = [
+  { when = "cant_recall",    goto = "recall_rest" },  # too drained to 귀환 -> rest to regen MV first
+  { when = "blind_recalled", goto = "to_clinic" },    # no fail line after 귀환 -> it landed (blind
+                                                      # hides the room render, so confirm by absence)
+  { when = "at_anchor",      goto = "to_clinic" },    # (if the title DID render) landed at 중앙 광장
+  { when = "stuck:60",       goto = "to_clinic" },    # ultimate fallback
+]
+
+[state.recall_rest]
+arm      = ["survival"]
+on_enter = ["lie_down"]            # 자 to regen enough MV to 귀환
+step     = "noop"
+transition = [
+  { when = "can_recall", goto = "recall" },
+  { when = "stuck:300",  goto = "recall" },          # cap: MV also regens standing
+]
+
+[state.to_clinic]
+arm      = ["survival"]
+on_enter = ["go_clinic"]           # 동 — east of 중앙 광장 is the 치료소
+step     = "noop"
+transition = [ { when = "always", goto = "cure" } ]
+
+[state.cure]
+arm      = ["survival"]
+on_enter = ["cure_blind"]          # 장님치 부탁 — the healer cures the blindness
+step     = "noop"
+transition = [
+  { when = "not_blind", goto = "resume" },   # a cure line cleared blind (if we ever detect it)
+  { when = "stuck:8",   goto = "resume" },    # else assume cured once the request has landed
+]
+
+[state.resume]
+arm      = ["survival"]
+on_enter = ["clear_blind"]         # ensure the flag is clear, then hand back to travel
+step     = "noop"
+transition = [
+  { when = "always", switch = "travel" },    # travel recalls + walks back to the hunt zone
+]

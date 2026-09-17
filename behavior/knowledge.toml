@@ -1,0 +1,546 @@
+# Editable knowledge the accessor reads. Hot-reloaded in place on save.
+
+# Name aliases (KEY = parsed text, VALUE = the keyword the SERVER wants). Used two ways:
+#  1. EXACT: a parsed name looked up before a command — repair '<name> 수리', attack
+#     '<name> 공격', pickup. e.g. 장비 shows "기간테스의바지" but repair needs "기간".
+#  2. ROW override for a hostile ENTITY: some things render as a DESCRIPTION so the
+#     parser mis-reads or can't tell item-vs-mob (거울의 방: "다이아몬드 킹 카드이다",
+#     "…고양이 체사네코다" mangles to "고양"). If a KEY here appears ANYWHERE in an
+#     entity's line it WINS over the parser. The VALUE can be:
+#        "카드"                    a keyword -> treat as a MOB, attack with it
+#        ""                        empty -> skip (not a target)
+#        { name="X", kind="item" } declare BOTH the name AND the kind, for when auto-
+#                                  detection can't tell (kind: mob|item|readable|ambient;
+#                                  non-mob kinds are never attacked). name optional.
+#     First matching KEY wins, so use SPECIFIC substrings. A whole zone is taught by
+#     DATA here — never hardcoded. Configure by what you SEE in the line.
+[aliases]
+"기간테스의바지" = "기간"
+# Town/room FIXTURES that read like entities but are NOT mobs ("" = never a target).
+"게시판" = ""
+"안보면 역사의길 사냥함에 있어서 많은 착오가 생길지도 모릅니다 꼭 보세요 -안내판-" = { name = "안내판", kind = "fixture" }
+"화려한 여인상이 조각되어 있는 분수대가 물을 뿜어 내고 있다." = { name = "분수대", kind = "fixture" }
+"샤프앤스피디" = { name = "샤프앤스피디", kind = "fixture" }
+# 가이아: "…이끼로 하나가득 덮힌 다 쓰러져가는 석상하나가 서 있다" — a moss-covered
+# crumbling statue. The parser reads "석상하나" as a mob; it's a fixture (name 석상).
+"석상" = ""
+"제우스의번개" = "제우"
+"니케의방패" = "니케"
+"지혜의바지" = "지혜"
+"플레이어제로의 썬더볼트" = "썬더볼트"
+"플레이어제로의 용무신갑" = "용무신갑"
+"플레이어제로의 머신바디" = "머신"
+"플레이어제로의 불사의 갑옷" = "불사"
+"플레이어제로의 카타나" = "카타나"
+"플레이어제로의 소드브레이커" = "소드"
+"플레이어제로의 청동갑투구" = "청동갑투구"
+"객현국의 거불탄방패" = "거불탄"
+"일군국의 사와라바지" = "사와라"
+"파이들 스피어" = "파이들"
+"엘프의칼" = "엘프"
+"플레이어제로의 피닉스 레깅" = "피닉스"
+"스튀르들뤼손의 블랙 레네게이드" = "블랙"
+"스튀르들뤼손의 써클렛" = "써클렛"
+"스튀르들뤼손의 순백의 플라스틱 슈츠" = "순백"
+"스튀르들뤼손의 안티쇼크 타이즈" = "안티"
+"스튀르들뤼손의 스파이드" = "스파이드"
+"현실의자각의 블랙 레네게이드" = "블랙"
+# 거울의 방 card mobs — attack by suit (KEY found in the line -> attack with VALUE):
+"다이아몬드" = "다이아몬드"
+"클로버"     = "클로버"
+"하트"       = "하트"
+"스페이드"   = "스페이드"
+"목걸이"  = { name = "목걸이", kind = "item" }
+"불고기피자" = "불고"
+# ORDER MATTERS: first matching KEY wins (resolve_alias scans top-down), so put the
+# SPECIFIC whole-sentence rules ABOVE the broad ones. The handmaiden's line LEADS with
+# mood flavor ("하얀 장미에 …빨간 페인트를 칠하고 있는 시녀이다.") — the real mob is 시녀,
+# but the broad "장미" below would grab it (장미 isn't in the room). Keying a distinctive
+# slice of the WHOLE SENTENCE here makes it resolve to 시녀 first; the broad "장미" still
+# handles rooms where a rose really is the target.
+"빨간 페인트를 칠하고 있는 시녀" = { name = "시녀", kind = "mob" }
+# The Queen's line leads with flavor ("기다란 채찍을 휘두르며 뾰족한 하이힐로 누군가 짓밟을
+# 사람을 찾고 있는 여왕이다.") — the parser grabbed "누군" (from 누군가). The real mob is 여왕.
+"짓밟을 사람을 찾고 있는 여왕" = { name = "여왕", kind = "mob" }
+"아름다운 여자의 얼굴" = { name = "스핑크스", kind = "mob" }
+"머라카락 한올 한올이 전부 빨간혓바닥을 낼름거리고 있는 여자" = { name = "메두사", kind = "mob" }
+# The apron the maids wear is a dropped ITEM, not a mob (its line also leads with
+# painting/하녀 flavor): key the whole sentence -> 앞치마, kind=item (never attacked,
+# gets a 가져 button).
+"하나씩 입고 있던 앞치마" = { name = "앞치마", kind = "item" }
+"장미" = { name = "장미", kind = "mob" }
+"운영자가 아니다.. 단지 진짜 바다의신 포세이돈일뿐이다.." = { name = "포세이돈", kind = "mob" }
+"올림푸스 신에게 대항하여 싸운 기간테스인 클리티오스이다." = { name = "클리티오스", kind = "mob" }
+"올림푸스 신에게 대항한 기간테스인 에피알테스이다." = { name = "에피알테스", kind = "mob" }
+"저주를 피해보려 자식들을 삼켜버린 매정한 아버지 크로노스이다." = { name = "크로노스", kind = "mob" }
+"올림푸스 신에 대항해 싸우던 기간테스인 엥켈라도스이다." = { name = "엥켈라도스", kind = "mob" }
+"올림푸스 신들에게 대항한 기간테스인 펠로레우스이다." = { name = "펠로레우스", kind = "mob" }
+"올림푸스의 신에게 대항한 기간테스족 폴리보테스이다." = { name = "폴리보테스", kind = "mob" }
+"올림푸스 신에게 대항해 싸우던 기간테스인 거인 미마스이다." = { name = "미마스", kind = "mob" }
+"위대한 대부이다." = { name = "대부", kind = "mob" }
+# "위대한 교황이다." = { name = "교황", kind = "mob" }
+"위대한 장군이다." = { name = "장군", kind = "mob" }
+"세상을 모시는 마가이다." = { name = "마가", kind = "mob" }
+"세상을 모시는 우가이다." = { name = "우가", kind = "mob" }
+"세상을 모시는 저가이다." = { name = "저가", kind = "mob" }
+"세상을 모시는 구가이다." = { name = "구가", kind = "mob" }
+"세상을 모시는 양가이다." = { name = "양가", kind = "mob" }
+"배달한웅의 뒤를 이은 2세 거불리한웅이다." = { name = "거불리", kind = "mob" }
+"배달한웅의 뒤를 이은 1세 한웅천황이다." = { name = "한웅천황", kind = "mob" }
+"양운국의 거불리한웅이 애용하시던 투구이다." = { name = "투구", kind = "item" }
+"[수호] (여럿의) 푸른 망토를 두른 남자가 주변을 경계하고 있다." = { name = "남자", kind = "mob" }
+"[수호] (여럿의) 하얀 망토를 두른 남자가 주변을 경계하고 있다." = { name = "남자", kind = "mob" }
+"기간테스와의 전투에서 올림푸스의 신들과 함께 싸운 운명의 여신 모이라이이다." = { name = "모이라이", kind = "mob" }
+"제우스와 함께 기간테스에게 맞선 승리의 여신 니케이다." = { name = "니케", kind = "mob" }
+"자신의 형제로부터 타타로스에 감금당한 퀴클롭스이다" = { name = "퀴클롭스", kind = "mob" }
+
+# "하얀 망토를 두른 남자" = { name = "고즈", kind = "mob" }
+"풍선같은 장갑복을 입은 병사" = { name = "장갑보병", kind = "mob" }
+"허리에 권총을 꽂은 남자" = { name = "장교", kind = "mob" }
+# examples to finish that room (verify the real keywords, then uncomment/adjust):
+#   "고양이"  = "고양이"                      # overrides the mangled "고양" (a mob)
+#   "목걸이"  = { name = "목걸이", kind = "item" }   # a described item, not a mob
+"한반도의 젖줄인 시원하고 맑고 깨끗한 한강이 유유히 흘러가고 있다." = { name = "한강", kind = "fixture" }
+"[수호] 오천의 병사로 신라의 오만대군에 맡서 싸우는 계백이 당신을 노려봅니다." = { name = "계백", kind = "mob" }
+
+# Talk-sender filter: 말/귓속말/채널 lines from these senders are NON-human noise —
+# NPCs, shopkeepers, the anonymous 누군가 placeholder, and OUR OWN characters (their
+# 방비! spell requests). Ignore them so a genuine human talking to a character stands
+# out (that's what talk-recognition is for: reacting to people testing if we're real).
+# Built from a 2-day log scan (no real human had talked); add senders as new NPCs
+# appear. A prompt prefix ("460:821:156> 이름") and a trailing 님 are stripped before
+# matching. Human-editable, hot-reloaded.
+[talk_filter]
+ignore = [
+  "대장장이", "양아치", "치료사 허준 선생", "시스템 시동 이후 최대 사용자",
+  "사또", "삐끼", "심하게 다친 남자", "떡돌이", "주인",
+  "플레이어제로", "스튀르들뤼손", "현실의자각", "아이샤",
+  "만물상 점원", "계룡산 도인", "부야바", "하인드", "주막 아줌마",
+]
+
+# Buffs the leader keeps up, by job. Requested via say("<name>!"); the supporter
+# hears the "!"-discriminated request and casts. Empty for jobs not listed.
+[required_buffs]
+# POLICY (2026-08-31): 자동지원 is OFF (hunting got dangerous for the supporter to fight), so
+# the supporter is free to keep the leader buffed — 방비 (protection) + 빨리가기 (haste) +
+# 분노 (rage) — all via the leader's "<buff>!" 말 request. A dual class ("전사 검사") unions
+# the buffs of each token, so all three lists carry the full set.
+default = []
+"전사" = ["방비", "빨리가기", "분노", "허상"]
+"검사" = ["방비", "빨리가기", "분노", "허상"]
+"장군" = ["방비", "빨리가기", "분노", "허상"]
+"성직" = ["방비", "빨리가기", "분노", "허상", "돌면"]
+
+# Buffs the LEADER casts on ITSELF — command "<buff> 걸" (NO target), distinct from [required_buffs]
+# above (those are cast by the SUPPORTER via the 말 protocol). By job token; a caster leader (성직)
+# keeps 수호/축복 up on itself. Re-cast out of combat on a BLIND timer ([buff_durations].<buff>, or
+# [hunt].self_buff_recast) — these have no confirmation line wired yet, so a timer (spam-free: one
+# cast per window) is used rather than the confirm-based [required_buffs] path. Tune the timer to
+# the real durations, or add a landed/faded pair to [buff_signals] to make it confirmation-based.
+[self_buffs]
+"성직" = ["수호", "축복", "뜨기"]
+
+# Potion item keywords, matched against inventory. First entry is used to drink.
+[potions]
+hp = ["쑥", "불고기"]
+mp = ["성수"]
+
+# Estimated buff durations in seconds — a FALLBACK re-cast timer. A buff with a
+# `faded` message in [buff_signals] expires accurately on that message; the duration
+# just bounds how long we wait if that message is ever missed.
+[buff_durations]
+"방비" = 240.0
+"빨리가기" = 300.0
+"분노" = 180.0            # fallback timer only — the faded signal below expires it accurately
+"허상" = 300.0            # measured ~275-281s land->merge; fallback only (the faded signal is exact)
+"돌면" = 600.0            # 돌면 stays up FAR longer than the old 240s timer (a re-cast while it's up
+                         # just echoes "마법이 허공에 메아리 칩니다" = no effect, so it can never
+                         # re-confirm and re-asked every 8s until the real fade). Lean on the faded
+                         # signal for true expiry; this high fallback stops the re-ask-while-up spam.
+
+# Per-buff server messages the RECEIVER (the leader) sees, used to track the buff by
+# CONFIRMATION rather than a blind timer. `landed` = the cast took hold (leader stops
+# re-asking until it lapses); `faded` (optional) = the expiry (leader re-asks at once).
+# webui scans these per prompt — a NEW buff is added here as DATA, no code change.
+[buff_signals]
+"방비"     = { landed = "당신을 보호함을 느낍니다", faded = "당신은 보호가 덜해지는 것을 느낍니다" }
+"빨리가기" = { landed = "당신은 더 빨리 움직이기 시작합니다", faded = "당신은 천천히 다니기 시작합니다" }
+"분노"     = { landed = "당신은 피가 끓어오는 분노를 느낍니다", faded = "당신은 분노가 가라앉음을 느낍니다" }
+# 허상 (mirror-image decoys). The RECEIVER sees the LAND in 3rd person (no 2nd-person "당신은…" form).
+# NAME-AGNOSTIC on purpose: match just the effect phrase, NOT "<leader>가 …" — a name-specific key
+# broke the instant the leader changed (플레이어제로 → 현실의자각), so 허상 never confirmed and was
+# re-asked forever (the "허상! 말" spam that also drained the supporter's MP into endless rest). Safe
+# because only the LEADER ever gets 허상 in the duo (the supporter casts it ON the leader). Fade is
+# 2nd-person. So the leader confirms on the split and re-asks only after the merge-back fade.
+"허상"     = { landed = "당신의 허상이 나타나기 시작합니다", faded = "당신의 허상이 당신의 몸과 합쳐집니다" }
+# 돌면 (stone-skin; 성직's 돌 sibling of 철면's 쇠). Land is 2nd-person; fade shares the skin-softens
+# line (성직 doesn't do 철면사냥, so no ambiguity). Without this 돌면 was re-asked forever too.
+"돌면"     = { landed = "당신의 피부가 돌로 변하는 것을 느낍니다", faded = "당신은 피부가 부드러워지는것을 느낍니다" }
+
+# 철면사냥 (iron-skin hunting). High-level zones (flagged `ironskin = true` in the map) whose
+# mobs deal too much physical damage to fight normally: the 마법사 supporter casts 철면 to make
+# the LEADER immune to physical damage. Tracked SEPARATELY (ctx.ironskin_at), NOT in the buff
+# list, because it drives the whole hunt flow. Serious drawbacks the flow must manage: (1) the
+# cast HALVES the leader's HP, (2) it lasts only ~43s and often lapses mid-fight, (3) it costs
+# 700 MP. HARD RULE: never re-cast while it is still up (re-halves HP without extending the
+# timer) — re-cast REACTIVELY the instant the fade line appears.
+# Master server tick (~74.5s). 분노/빨리가기 fade ON it (to the same instant) and natural regen
+# rides it. The tick layer (gumiho/ticktracker.py) LEARNS the phase by observing these buff fades
+# — it isn't knowable at connect time (the UI shows "syncing" until two consistent boundaries are
+# seen). 철면 rides the half-tick on top of it. period is a hint, refined from observations.
+[tick]
+period         = 74.5
+tol            = 3.0             # a boundary may sit this far from k whole periods and still count
+min_confirm    = 2              # consistent boundaries needed before `synced`
+boundary_buffs = ["분노", "빨리가기"]   # buffs whose fade marks a master-tick boundary
+
+[ironskin]
+spell    = "철면"
+landed   = "당신은 피부가 쇠로 변하는 것을 느낍니다"
+faded    = "당신은 피부가 부드러워지는것을 느낍니다"
+duration_backstop = 75.0   # ironskin_up() falls back to this if the FADE line is ever missed. Must
+                           # sit ABOVE the real max 철면 duration — 철면 can outlast the ~43s typical
+                           # (a cast lasted >55s and the old 55 backstop timed out while it was still
+                           # up, so the leader re-asked 철면 BEFORE it faded — a wasted early re-cast).
+                           # The fade line is the reliable primary signal; this only backstops a miss.
+cast_min_hp_pct = 55       # the leader won't REQUEST 철면 below this % max HP. 철면 hard-fails below
+                           # 50%; the 55% floor keeps a 5% cushion so a hit during the cast can't drop
+                           # it under the 50% limit before it lands. Below 55% it heals up first
+                           # (should_drink_hp:50). rest_hp_pct is kept ≥ this so it wakes castable.
+# UI countdown model (measured from logs). 철면 does NOT have a fixed duration: it lasts ~base_secs,
+# then FADES on the server's fixed tick_secs expiry grid (37.5s = half the ~75s master tick; fade
+# time mod 37.5 had stdev 0.10s over 38 casts). So the fade is PREDICTED exactly from a learned grid
+# anchor (a previously observed fade pins the phase) — see access.ironskin_predict. Before the first
+# fade of a server session, the bar falls back to nominal_secs until a fade teaches the phase.
+tick_secs    = 37.5        # server 철면 expiry-grid period (measured)
+base_secs    = 36.75       # min lifetime before it can fade on the next grid tick (measured fit)
+nominal_secs = 56.0        # fallback total for the bar BEFORE a fade has taught the grid phase (median)
+mp_cost    = 700           # MP per cast; the supporter must retain enough to re-cast mid-fight
+sustain_mp = 1400          # rest to recover supporter MP once it can't afford ~2 more casts
+recast_retry = 6.0         # min seconds between 철면 REQUESTS. Must exceed the cast->land latency
+                           # (the leader asks, the supporter casts, the spell resolves, the leader
+                           # sees its own land line — ~3s of round-trips). Set below that, the
+                           # leader re-asks before its first cast lands -> a wasted double-cast.
+                           # The leader's own up-status stops the ask the instant it lands, so this
+                           # only ever fires for a genuinely MISSED (stochastic) cast.
+                           # NOTE: recast_retry is now only a SECONDARY floor — the primary guard is
+                           # the in-flight latch below (request_timeout), which is cleared by the
+                           # LAND event, not a timer, so it can't be defeated by cast->land latency.
+request_timeout = 12.0     # once the leader asks for 철면, it will NOT ask again until the LAND line
+                           # arrives (webui clears the latch) OR this many seconds pass (a genuinely
+                           # LOST cast -> one retry). This is the real double-cast fix: a plain timer
+                           # (recast_retry) expired before the ~5.5s cast->land latency completed, so
+                           # a 2nd ask slipped through while 철면 was still in flight -> double-cast ->
+                           # HP crashed to 1 -> death (2026-09-07, twice). Must exceed pacer-queue +
+                           # cast->land latency with margin; a truly missed cast still retries after.
+want_window  = 2.0         # a cast fires only if the leader stamped "engaging" within this many
+                           # seconds (or is mid-battle) — NEVER cast idle in town/rest/travel
+rest_hp_pct  = 55          # in a 철면 zone the leader stops resting HP here. MUST be ≥ cast_min_hp_pct
+                           # (55) so it wakes able to REQUEST 철면 (which then caps it back to 50%);
+                           # resting higher is wasted since the cap discards it. Small margin over 55.
+                           # Supporter MP still gates rest to full_pct (95%), banking a hunting burst.
+flee_hp_pct  = 25          # mid-fight with 철면 down: bail if HP drops below this % (even if the
+                           # supporter still has MP — the cast isn't landing fast enough)
+fade_flee_hold = 6.0       # secs to HOLD after 철면 FADES mid-battle before the emergency starts to
+                           # 도망. The leader now has ample HP to tank a couple of hits, so this avoids
+                           # a jumpy flee the instant 철면 lapses. Only the FIRST flee decision waits;
+                           # a flee already in flight (fail-retry / grace) skips it. 0 disables.
+flee_grace   = 4.0         # max secs to HOLD after a 도망 while its result is still in flight (don't
+                           # re-send 도망 before we know if it landed). It is CLEARED the moment the
+                           # success line (flee_ok) arrives so the leader can act at once — re-flee if
+                           # the new room is also lethal, or rest/hunt if safe — instead of tanking out
+                           # a stale grace. A FAILED 도망 (flee_fail) ignores it entirely and retries now.
+flee_fail    = "도망치지 못했습니다"  # the 도망-FAILED line ("실패닷! 당신은 도망치지 못했습니다!"). 도망
+                           # is stochastic and fails often; on this line the leader is still trapped
+                           # in the fight, so it must repeat 도망 immediately until one succeeds.
+flee_ok      = "간신히 도망쳤습니다"  # the 도망-SUCCEEDED line ("당신은 간신히 도망쳤습니다."). Clears the
+                           # flee grace so a successful flee doesn't leave the leader holding a stale
+                           # timer (it moved rooms — re-assess immediately: flee again / rest / hunt).
+
+# Multi-strike combo skill (연타): eligible MELEE classes at/above a level INITIATE a
+# fight with the skill instead of plain 공격, then RE-QUEUE it (bare, no target) each
+# time the server shows the wind-up cue — 2 wind-up turns then a multi-strike, and it
+# must be re-entered after each strike. Safety: the initiate is the ONLY targeted send
+# (one enemy); the re-queue is bare and fires ONLY mid-fight on the cue, so it can't
+# engage a second enemy or mistime. Empty combo_skill -> disabled (plain 공격).
+# Mob danger assessment: before engaging an UNFAMILIAR mob the hunt runs `<mob> 고려`
+# (consider). If the reply contains any `danger_phrase` the mob is recorded DANGER and
+# NEVER attacked; otherwise it's recorded SAFE. Learned verdicts persist to
+# behavior/mob_danger.json (a mob is 고려'd once). Seed known verdicts here — these win
+# without a 고려. 호러플랜트 ONE-SHOT-killed both characters in 이상한 나라 (813 HP → dead
+# in one hit), rotting the corpses and losing all gear — seeded DANGER permanently.
+[mob_danger]
+# 고려 replies that mean "too strong — do not fight". "미쳤군요!" (are you insane) is
+# the one 호러플랜트 returned that WASN'T listed, so the gate ruled it SAFE and it killed
+# both again. NOTE: this denylist is fail-DANGEROUS (any unlisted reply -> SAFE); a
+# fail-safe allowlist of SAFE replies is the proper fix (pending the safe-phrase list).
+danger_phrases = ["꿈도 꾸지 마세요", "많은 운과 좋은 장비가 필요합니다", "미쳤군요"]
+# Seeded DANGER by the mob's ATTACK KEYWORD, not its display name: 호러플랜트's target
+# keyword is "식물" (plant) — a name-only "호러플랜트" entry never matched what we'd 고려/attack.
+# known_danger   = ["호러플랜트", "식물"]
+known_safe     = []
+consider_wait  = 2.0            # seconds to wait for the 고려 reply before ruling SAFE
+
+# Death recovery (FRAMEWORK line 60). On death -> 치료실 (resting); morgue is 아래.
+# There: 시체수습 -> re-equip (모두입어 for armours; "<무기> 무장" for the weapon; "<hold>
+# 쥐어" for holds) -> 시체 묻어 (recover+revive) -> 보험. Then travel back to hunt.
+[death]
+stand         = "일어"           # stand out of the resting state on arrival
+clinic        = "치료실"         # where a dead character lands
+to_morgue     = "아래"           # the morgue is 아래 from 치료실
+salvage       = "시체수습"       # pull items off our corpse (before it rots)
+wear_all      = "모두입어"      # wear all armours (and light source)
+wield         = "무장"           # "<weapon> 무장"
+hold          = "쥐어"           # "<item> 쥐어" for held items
+weapon_slots  = ["무기"]         # 장비 slot labels that are weapons
+hold_slots    = ["손", "쥠", "보조", "왼손", "오른손"]   # slot labels that are held items
+bury          = "시체 묻어"      # bury OUR corpse -> recover HP/MP + revive
+insure        = "보험"           # re-insure (insurance is consumed on death)
+
+[combat]
+combo_skill     = "연타"
+combo_jobs      = ["전사", "검사", "장군"]
+combo_min_level = 60                       # eligible at this level or above
+combo_cue       = "휘두르기 시작합니다"    # server text meaning "re-queue the combo now"
+# KNOCKDOWN: a mob's power-bash floors us ("…당신은 땅바닥에 떨썩 주저앉습니다.") — stand up at once.
+# Keyed on the generic knockdown EFFECT (not the specific attacker "누소드"), so any mob that
+# floors us triggers it. Self-clearing reflex (knocked_down flag) -> stand_cmd. Hot-reloadable.
+knockdown_cue   = "땅바닥에 떨썩 주저앉"
+stand_cmd       = "일어"
+# BATTLE SPELL (caster leaders): while IN a fight, cast this SPELL for extra damage on top of the
+# normal attack. Cast as "<spell> <verb>" with NO target — the fight is already locked on the
+# opponent (e.g. "벼락 걸어"). Gated to battle_spell_jobs, throttled by battle_spell_gap, skipped
+# below battle_spell_min_mp so it never spam-fails when out of MP. Empty battle_spell disables it.
+battle_spell         = "벼락"
+battle_spell_verb    = "걸어"   # cast verb: "<battle_spell> <verb>" -> "벼락 걸어" (no target)
+battle_spell_jobs    = ["성직"]
+battle_spell_gap     = 3.0      # min secs between casts (spell cadence / MP conservation)
+battle_spell_min_mp  = 15       # skip if MP% is below this (don't spam a cast we can't afford)
+
+# Resupply destinations (room-title fragments the navigator paths to).
+[places]
+fountain = "광장 사거리"
+smith    = "대장간"
+clinic   = "치료실"
+bakery   = "한성 떡집"
+
+# Hand-recorded direction macros, keyed by destination title.
+[routes]
+# 광장 사거리 (fountain) is 남,남 from the 중앙 광장 recall anchor — a fixed town
+# route, NEVER graph-pathed (the polluted map sent us WEST and broke the run).
+"광장 사거리" = ["남", "남"]
+# 대장간 (smith) is still graph-nav'd from the fountain (it worked); make it a
+# fixed macro too once its fountain->smith route is confirmed live.
+"대장간" = ["남", "남", "동", "동", "남"]
+# 치료실 is 동 from the 중앙 광장 anchor — used as a fallback for the clinic leg
+# after we recall back (we never navigate out of the half-mapped 대장간).
+"치료실" = ["동"]
+# 한성 떡집 (buy 시루떡) is 남,남,남,남,남,동,북 from 중앙 광장. It hangs off a
+# DIFFERENT branch than the smith, so resupply visits it as a round-trip from the
+# fountain (fountain-prefix stripped -> 남,남,남,동,북 out, reversed back).
+"한성 떡집" = ["남", "남", "남", "남", "남", "동", "북"]
+
+# How gear repair is issued at 대장간. mode "each" -> "<item> 수리" per worn item;
+# mode "all" -> a single command. Adjust verb/all_command after testing.
+[repair]
+mode        = "each"
+verb        = "수리"
+all_command = "수리"
+
+[hunt]
+zone         = "한성의 하수구"   # hunting ground; used to look up the travel route
+# 'Area cleared' now means the whole zone is SWEPT (every room visited, every
+# exit walked) with no mob — coverage.next_move decides it, not a move count.
+sweep_cap    = 40               # safety ceiling: give up a sweep after N mob-less moves
+min_barren_moves = 6            # gridsweep only: don't concede "barren" (-> wait) until we've moved
+                                # at least this many mob-less rooms. A small same-title 지도 pocket
+                                # gets swept in 1-2 rooms and barren'd instantly; this makes it walk
+                                # a few more rooms (plain exit-walk) to find adjacent mobs first. Only
+                                # bites on SMALL pockets — a big pocket passes this while sweeping.
+# Fixed-map roam pacing / correctness. move_confirm_wait: seconds to wait for a move's
+# render to CONFIRM (advance pos) before allowing the next move — prevents the map from
+# double-counting or double-WALKING a step (the 7-북 overshoot); if the render never lands
+# in this window, re-look (봐) to re-sync instead of blindly re-moving. move_gap: an extra
+# deliberate minimum gap between confirmed roam steps (human cadence, ~20% slower roam;
+# 0 disables). Both hot-reload.
+move_confirm_wait = 3.0
+move_gap          = 0.3
+# Barren re-sweep: after the whole fixed map is swept, RE-SWEEP it this many more times before
+# conceding the zone is exhausted (-> wait). A single pass declared barren a bit early, missing
+# mobs that respawned / wandered into already-swept rooms during the pass. The counter resets the
+# instant a live hostile is seen, so a producing zone keeps hunting; only fully-empty passes count.
+# Raise for a longer hold before waiting; 0 = concede after the first full sweep (old behavior).
+barren_resweeps   = 1
+relook_gap        = 1.5         # min secs between anti-spam re-looks (봐) when an attack didn't
+                                # register combat — stops a 봐 storm while still refreshing the room
+self_buff_recast  = 120.0       # secs between re-casts of a leader SELF-buff ([self_buffs], e.g.
+                                # 성직's 수호/축복) — a blind timer since they have no confirmation
+                                # line; per-buff override via a [buff_durations] entry. Tune to real
+# Rest floor: after the current fight, sleep to recover BEFORE the next mob when HP or
+# MP drops below these. Above this sits the potion layer (should_drink_hp:50 /
+# should_drink_mp:40 in reflexes/survival.toml). Raised HP 30->40->50 so a 전사 rests
+# earlier — a single fight dropping HP to ~12% (500/4173) was too close to death.
+rest_hp_pct  = 40
+rest_mp_pct  = 20
+# Hunt navigation is by a hand-authored FIXED MAP only (behavior/hunting_maps/<zone>.toml).
+# A zone is fixed-map-navigated automatically iff it has a map file — there is no zone LIST
+# here any more (the old `survey_nav_zones` + the dead-reckoning ZoneSurvey it drove are gone;
+# the survey corrupted over time and killed the duo). A zone without a map falls to the 지도
+# gridsweep. The confinement knobs below (survey_radius / confine_block_dirs / [zone_confine])
+# are now INERT — a FixedMap is a complete, self-bounded layout — kept only as harmless no-ops.
+# Survey-nav roam is bounded to this many graph-hops from the arrival ANCHOR — the zone
+# name is far too coarse (이상한 나라 is 900+ rooms across floors/warps), so without this
+# the roam chases mobs across the whole map. 10 was still too loose — it let the roam
+# walk 성의 일층 -> 입구 -> 정원 -> 거울의 방 -> 알수없는 길 -> 숲으로 가는 길 (~5-6 hops) into
+# 돌아오지 않는 숲, straight onto 호러플랜트. Tightened to the actual mob pocket.
+survey_radius = 4
+# Directions the survey roam must never EXPLORE — 위/아래 change floors and leave the mob
+# pocket (아래 drops toward 호러플랜트; 위 goes up to 이층). It blocks EXPLORING up/down,
+# NOT returning: a stray onto another floor still routes home (so coming back DOWN to the
+# hunt floor is allowed), and the pocket is confined to the hunt floor so nothing BELOW
+# it is ever roamed into. Radius is a backstop.
+confine_block_dirs = ["위", "아래"]
+regroup_after = 15              # (kept name) debounce before 'separated' fires
+regen_check  = 180              # wait this long after clearing, then RE-SWEEP the pocket
+                                # to find respawns (they spawn silently; sweeping finds them)
+buff_reask   = 8.0              # re-ask the supporter for a missing buff at most this often
+                                # (the leader keeps asking until the cast is CONFIRMED landed,
+                                # so a request dropped while the supporter rested self-heals)
+# GENERAL (any hunt): the supporter chases a FLEEING leader (a 도망 shakes off the auto-follow that
+# normal walking keeps). The leader's flee shows TWO lines, e.g.:
+#   "플레이어제로가 공포에 질려 도망치려 합니다!"          <- flee_mark: the FLEE-specific trigger
+#   "플레이어제로가 남쪽으로 바람을 가르며 떠났습니다."      <- the direction (also printed on normal
+#                                                            walks, so it must NOT be the trigger)
+# webui fires the chase ONLY when flee_mark is present, then reads the direction from the 2nd line.
+flee_mark    = "도망치려"
+
+# (buff confirmation is now data-driven in [buff_signals] above — no marker map.)
+
+# PER-ZONE survey confinement (overrides survey_radius / confine_block_dirs above). Each
+# zone differs: 이상한 나라 1층 is one HUGE floor -> a tight radius keeps them in the mob
+# pocket. 가이아 is one floor of same-title 카오스 rooms with OTHER floors above (올림푸스
+# 신전) -> a WIDE radius to sweep the whole 카오스 floor, but block 위/아래 so the roam
+# never wanders onto 올림푸스 신전 (up) or below. Falls back to the globals if a zone
+# isn't listed. (This table must stay LAST in [hunt] — a table header absorbs every key
+# after it, so putting scalars below it would move them out of [hunt].)
+[zone_confine]
+"이상한 나라 1층" = { radius = 4,  block_dirs = ["위", "아래"] }
+"가이아"        = { radius = 25, block_dirs = ["위", "아래"] }
+# 올림푸스 신전: one planar floor — 4 3x3 squares joined by a central cross; the route
+# lands at room 20 (the center), and the corners are ~6-7 hops out, so radius 10 covers
+# the whole floor. block 위/아래 to stay on it. The XX centers (4 rooms per grid cell,
+# by entry direction) are distinguished by the survey's coord+exit-set identity.
+"올림푸스 신전"  = { radius = 10, block_dirs = ["위", "아래"] }
+
+# While asleep/quiet the server pushes no prompt, so the engine polls to refresh
+# vitals (to tell when it's recovered) and to keep the link alive.
+[rest]
+watchdog = 12                   # seconds of silence before a poll
+poke     = "점수"               # the poll command (carries current HP/MP); "" to disable
+full_pct = 90                   # "fully recovered" threshold: HP for both chars, and MP for the
+                                # SUPPORTER (its buffs/철면/spells are the real bottleneck). Lowered
+                                # 98->90 (2026-09-12): a caster's MP sits ~90% after casting, so a 98%
+                                # bar meant minutes of idle sleeping to top off the last few %.
+leader_mp_pct = 0               # the LEADER's rest ends on HP alone — it does NOT wait for MP to
+                                # refill (melee-primary; casts are optional and MP regens while
+                                # hunting). 0 = ignore leader MP entirely; raise for a minimum reserve.
+
+# Recorded command routes from the 중앙 광장 anchor to a zone (dirs + specials).
+# Record the hunt-zone route once so resupply can walk back, e.g.:
+#   "한성의 하수구" = ["남","남", ..., "맨홀 열", "아래"]
+[travel_routes]
+
+[resupply]
+refill_command       = "버드 물 채워"
+fountain_drink       = "물 마셔"     # 광장 사거리 room: '"분수대 마셔" "물 마셔"' —
+                                     # "분수 마셔" (no 대) is NOT a valid command
+                                     # and silently does nothing (stayed hungry).
+field_drink          = "버드 마셔"   # drink from the carried Budweiser bottle in the
+                                     # field when thirsty (avoids a town trip for thirst)
+field_drink_interval = 4.0           # min seconds between field drinks (anti-spam; the
+                                     # server's "목이 마르지 않습니다" clears thirst)
+field_eat            = "시루떡 먹어" # eat carried 시루떡 in the field when hungry
+                                     # (avoids a town trip for hunger)
+field_eat_interval   = 4.0           # min seconds between field eats (the server's
+                                     # "배가 부릅니다" clears hunger)
+provision_item       = "시루떡"      # food to stock at 한성 떡집 (for a future field_eat)
+provision_target     = 2             # buy up to this many; a cargo-weight refusal is fine
+provision_buy_verb   = "사"          # object-first buy: '시루떡 사' (cf. '불고기 사')
+fountain_drinks      = 25            # how many times to drink (generous -> reaches "full")
+min_mv               = 40            # move points BOTH need before the walking legs start
+                                     # (enough for the town round-trip; MV recovers at stops)
+maintenance_interval = 999999   # mid-hunt maintenance trip disabled (route-follow can
+                                # separate the duo; re-enable after that's made robust)
+clear_interval       = 120      # zone cleared + fully recovered -> resupply if it's been
+                                # this long since the last one (min spacing; 0 = every clear)
+gear_check           = 180      # send 장비 this often while hunting to watch durability
+gear_repair_pct      = 0.5      # lowest equipped-item endurance <= this fraction -> go repair
+                                # (0.5 = the 50% resupply-need threshold; part of the
+                                #  need test alongside either char being hungry/thirsty)
+
+# Recall is stochastic. Retry 귀환 every retry_interval seconds up to max_tries,
+# then give up (the resupply halts with an error instead of wandering).
+[recall]
+retry_interval = 3.0             # quick retry pace for the first `quick_tries` attempts
+quick_tries    = 6               # after this many, back off to slow_interval
+slow_interval  = 20.0            # then keep retrying 귀환 every 20s FOREVER — recall is
+                                 # stochastic, so it must never give up (a halt is a dead
+                                 # end that even a manual recall can't recover)
+anchor_room    = "중앙 광장"      # where 귀환 lands; walk_back reverses the trail to here
+fail_mark      = "시도가 실패"     # the 귀환-FAILED line ("귀환 시도가 실패했습니다" / "귀환시도가
+                                 # 실패했습니다"). BLIND recovery confirms a recall by the ABSENCE of
+                                 # this after a 귀환 (blindness hides the room render, so it can't
+                                 # confirm by seeing 중앙 광장). Specific to 귀환 — 도망 fails differently.
+blind_confirm_wait = 3.0         # secs to wait after a blind 귀환 with no fail line before treating
+                                 # the recall as landed (the fail line, if any, comes back promptly)
+
+[engine]
+# Reflex bundles armed in EVERY workflow state, on top of the state's own `arm` list
+# — for combat-continuity that no mode should gate. Appended after the state's
+# bundles, so survival (potions) still wins a same-tick tie. Each guard is
+# self-clearing/role-gated, so an idle character never spuriously fires them:
+#   - combat  : stand up (일어나) the instant a power-bash floors us (only when knocked_down)
+#   - combo   : 전사/검사/장군 continue a 연타 multi-strike (only when fighting + eligible)
+#   - support : the supporter casts a spoken (말) spell request (only when one is pending)
+#   - ironskin: supporter keeps 철면 on the leader; leader flees if it lapses unrenewably
+#               (both no-ops outside a 철면 zone / for the wrong role)
+always_reflexes = ["combat", "combo", "support", "ironskin"]
+# Reflex bundles that fire even when the engine is toggled OFF (manual play) — see
+# Engine._offline_tick. A deliberately NARROW subset: only REACTIONS that help a human at the
+# keyboard, never anything that initiates hunting/travel/roam/rest.
+#   - combo   : 연타 multi-strike continuity for whoever is in a fight
+#   - support : the supporter casts a spoken (말) spell request, and chases a fleeing leader
+# `ironskin` is intentionally EXCLUDED offline — the leader's auto 철면-request / emergency-flee is
+# autonomous hunting logic that would fight a manually-played leader; death/blind RECOVERY is
+# handled separately (not a reflex bundle) and always runs offline.
+offline_reflexes = ["combat", "combo", "support"]
+# After a genuinely dead/blind character recovers OFFLINE, the recovery gets this many seconds to
+# finish the salvage sequence and reach its terminal halt. If it can't (a recovery that can't
+# complete with the engine off, or one the user handled manually), it is ABANDONED so the reflexes
+# resume — a stuck offline recovery must never permanently freeze spell/연타 (an in-battle character
+# abandons it immediately, without waiting out this grace).
+offline_recovery_grace = 20.0
+
+[travel]
+# Move points (이동력) gate the whole return cycle: both 귀환 and every route step
+# spend MV, so travel now RESTS to recover it instead of spam-failing 귀환 on empty.
+min_mv      = 150               # rest (자) until BOTH characters have at least this much
+                                # MV before WALKING the route into the zone
+recall_min_mv = 100             # MV needed to attempt 귀환. Below this we REST first instead of
+                                # spam-failing "이동력이 없어서 귀환할 수 없습니다" (seen 47× when a
+                                # follower stranded at MV=38 kept retrying). Observed: recall
+                                # FAILED at 38, SUCCEEDED at 92 -> 100 is a safe floor. Still far
+                                # below the 150 WALK gate, so recall-then-rest-at-anchor holds.
+min_mv_step = 10                # never fire a route step below this — an out-of-MV move
+                                # fails silently and would desync us from the real room
+max_step_retries = 4            # a route MOVE refused ("갈 수 없습니다") is RETRIED this many
+                                # times (waiting for a door/block to clear); past it the walk
+                                # is deemed derailed -> re-recall to the anchor and re-walk
+                                # (stops a single skipped step from finishing the route in the
+                                # wrong room — the 주막집 dump)
+# Rooms that are town, never huntable: if `hunting` ever starts (or lands back) in one
+# of these, it bounces straight to `travel` (stops the 게시판-attack / 자-깨-in-town loop).
+town_rooms  = ["중앙 광장", "치료실", "광장 사거리", "대장간", "한성 떡집", "기증의 방"]
+
+# Pre-known FIXED MAPS moved to behavior/hunting_maps/*.toml (one file per map, including its
+# route + matrices + portals). See gumiho/hunting_maps.py and behavior/hunting_maps/_example.toml.

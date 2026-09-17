@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>gumiho · 모바일</title>
+<style>
+  :root {
+    --bg: #10161300; --panel: #141b18; --line: #223028; --dim: #6b7d75;
+    --accent: #52c79a; --text: #cfe3d8; --warn: #e0b458; --err: #e06c60;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0e1411; color: var(--text);
+    font-family: -apple-system, system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  #hdr {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  #hdr .brand { font-weight: 700; color: var(--accent); font-size: 14px; }
+  #hdr .mode {
+    font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 12px;
+    background: #0e1411; border: 1px solid var(--line); color: var(--dim);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  #hdr .mode.on { color: var(--accent); border-color: var(--accent); }
+  #hdr .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  #hdr .dot.on { background: var(--accent); }
+  #hdr .meta { margin-left: auto; text-align: right; font-size: 11px; color: var(--dim);
+    line-height: 1.35; }
+  #hdr .meta b { color: var(--text); font-weight: 600; }
+  #hdr .hp { color: var(--warn); }
+  #out {
+    flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 10px 12px; white-space: pre-wrap; word-break: break-word;
+    font-family: ui-monospace, Menlo, monospace; font-size: 14px; line-height: 1.5;
+    background: #0e1411;
+  }
+  #out .sent { color: var(--accent); }
+  #out .info { color: var(--dim); }
+  #out .error { color: var(--err); }
+</style>
+</head>
+<body>
+<div id="hdr">
+  <span class="brand">gumiho</span>
+  <span id="mode" class="mode">—</span>
+  <span id="dot" class="dot"></span>
+  <span class="meta"><span id="room">—</span><br><span id="hp" class="hp">HP —</span></span>
+</div>
+<div id="out"></div>
+
+<script>
+const SID = "a";                         // LEADER only
+const ANSI_FG = {
+  30: "#6b7d75", 31: "#e06c60", 32: "#52c79a", 33: "#e0b458",
+  34: "#6fa8dc", 35: "#c48ce0", 36: "#5fc4c4", 37: "#cfe3d8",
+  90: "#55655e", 91: "#f0938a", 92: "#7fe0b8", 93: "#f0cc80",
+  94: "#93c1f0", 95: "#dcaef5", 96: "#8adcdc", 97: "#ffffff",
+};
+function ansiFrag(text) {
+  const frag = document.createDocumentFragment();
+  const parts = text.split(/\x1b\[([0-9;]*)m/);
+  let fg = null, bold = false;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) {
+      for (const code of (parts[i] || "0").split(";").map(Number)) {
+        if (code === 0) { fg = null; bold = false; }
+        else if (code === 1) bold = true;
+        else if (code === 22) bold = false;
+        else if (code === 39) fg = null;
+        else if (ANSI_FG[code]) fg = code;
+      }
+      continue;
+    }
+    const chunk = parts[i].replace(/\x1b\[[0-9;?]*[A-LN-Za-ln-z]/g, "");
+    if (!chunk) continue;
+    const span = document.createElement("span");
+    let color = fg;
+    if (bold && color !== null && color < 90) color += 60;
+    if (color !== null) span.style.color = ANSI_FG[color];
+    if (bold) span.style.fontWeight = "600";
+    span.textContent = chunk;
+    frag.appendChild(span);
+  }
+  return frag;
+}
+
+const out = document.getElementById("out");
+const atBottom = () => out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+function append(text, cls) {
+  const stick = atBottom();
+  const span = document.createElement("span");
+  if (cls) { span.className = cls; span.textContent = text; }
+  else span.appendChild(ansiFrag(text));
+  out.appendChild(span);
+  while (out.childNodes.length > 1200) out.removeChild(out.firstChild);
+  if (stick) out.scrollTop = out.scrollHeight;
+}
+
+const modeEl = document.getElementById("mode");
+const dotEl = document.getElementById("dot");
+const roomEl = document.getElementById("room");
+const hpEl = document.getElementById("hp");
+let serverVer = null;
+
+function onState(m) {
+  if (m.server_ver) {                    // reload once if the server restarted (new code)
+    if (serverVer === null) serverVer = m.server_ver;
+    else if (serverVer !== m.server_ver) { location.reload(); return; }
+  }
+  // MODE = the engine's active workflow when running, else the connection status.
+  const STATUS_KO = { online: "접속", manual: "수동", "logging-in": "로그인 중",
+                      connecting: "연결 중", disconnected: "미접속" };
+  const running = m.engine && m.workflow;
+  modeEl.textContent = running ? m.workflow : (STATUS_KO[m.status] || m.status || "—");
+  modeEl.classList.toggle("on", !!running);
+  dotEl.classList.toggle("on", m.status === "online" || m.status === "manual");
+  if (m.room) roomEl.textContent = m.room;
+  hpEl.textContent = m.hp != null ? `HP ${m.hp}${m.hp_max ? " / " + m.hp_max : ""}` : "HP —";
+}
+
+let ws;
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => append("· 연결됨\n", "info");
+  ws.onclose = () => { append("· 연결 끊김 — 재접속 중…\n", "error"); setTimeout(connect, 1500); };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.sid && m.sid !== SID) return;  // leader only (state/text carry sid; globals don't)
+    if (m.type === "text") append(m.data);
+    else if (m.type === "sent") append("» " + m.data + "\n", "sent");
+    else if (m.type === "info") append("· " + m.data + "\n", "info");
+    else if (m.type === "error") append("! " + m.data + "\n", "error");
+    else if (m.type === "state") onState(m);
+  };
+}
+connect();
+</script>
+</body>
+</html>

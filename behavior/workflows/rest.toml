@@ -1,0 +1,41 @@
+kind    = "rest"
+initial = "gear_check"
+
+# Before sleeping, re-read 장비 so gear durability is CURRENT: if a weapon/armour has crossed
+# the repair threshold, go REPAIR it (resupply) before it breaks — a rest is a frequent pause,
+# so this catches worn gear far sooner than the periodic gear_check alone (a 카타나 was lost
+# overnight because a break slipped between scheduled reads). Not worn -> sleep as before.
+[state.gear_check]
+arm      = ["survival", "support"]
+on_enter = ["check_gear"]                 # leader: 장비 (fresh durability); supporter: no-op
+step     = "noop"
+transition = [
+  { when = "in_combat",      switch = "hunting",  sync = true },  # attacked mid-check -> fight
+  { when = "gear_worn",      switch = "resupply", sync = true },  # worn (fresh read) -> repair FIRST
+  { when = "pre_rest_ready", goto   = "sleeping" },               # read landed / nothing to read -> sleep
+  { when = "stuck:8",        goto   = "sleeping" },               # 장비 reply lost -> sleep anyway
+]
+
+# 자 to sleep until recovered, then 깨/일어 and back to hunting together.
+[state.sleeping]
+arm      = ["survival", "support"]              # keep `support` armed so a woken supporter can chase
+on_enter = ["lie_down"]
+step     = "noop"
+transition = [
+  { when = "in_combat",      switch = "hunting", sync = true },  # attacked while asleep -> fight (latch persists, rest again after)
+  # SAFETY NET: if the partner FLED while we're asleep, WAKE so we can chase it (movement is refused
+  # during 자, so we must 깨 first; the always-on chase reflex then follows once awake). Gated on
+  # partner_fled (a real flee message set pending_chase) — NOT `separated`, which fires on render
+  # staleness during a normal sleep and would wake the pair spuriously.
+  { when = "partner_fled",   goto = "waking" },
+  { when = "both_recovered", goto = "waking" },   # released when BOTH are full
+  { when = "stuck:300",      goto = "waking" },   # cap: don't sleep forever
+]
+
+[state.waking]
+arm      = []
+on_enter = ["wake_up", "clear_rest_flag"]         # recovered -> drop the rest latch
+step     = "noop"
+transition = [
+  { when = "standing", switch = "hunting", sync = true },
+]

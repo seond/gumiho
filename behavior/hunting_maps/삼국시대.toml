@@ -1,0 +1,101 @@
+# Hunting map — 삼국시대. One planar floor: 4 3x3 squares joined by a central cross; the
+# four XX cells are conditional-exit centres (excluded); the route lands dead-centre at room 20.
+name = "삼국시대"          # hunting-zone name (zone dropdown + the hunt target)
+start = "006"                     # 한강 부근 — the room the route lands at; hunting starts here
+# (scalars MUST sit above the [route]/[[matrix]] tables — a table header absorbs keys after it)
+
+[route]
+name = "삼국시대"          # route name (route dropdown)
+# Path FROM 중앙 광장 to the start room. Game commands: ㅂ=북 ㄴ=남 ㄷ=동 ㅅ=서, 위/아래, and
+# specials like "남대 열" (open the south gate). This is the travel route the hunt uses.
+steps = [
+    "ㅂ",
+    "ㅂ",
+    "북대 열",
+    "ㅂ",
+    "ㅂ",
+    "ㅂ",
+    "ㄷ",
+    "ㄷ"
+]
+
+[[matrix]]
+name = "main"
+grid = [
+  "... ... ... 000 ... ... ...",
+  "... ... ... 001 ... ... ...",
+  "... ... ... 002 ... ... ...",
+  "... ... ... 003 ... ... ...",
+  "... ... ... 004 ... ... ...",
+  "... ... 005 006 007 ... ...",
+  "... 008 009 ... 010 011 ...",
+  "012 013 ... ... ... 014 015",
+  "016 ... ... ... ... ... 017"
+]
+
+[[matrix]]
+name = "go_main"
+grid = [
+  "018 ... ... ... ... ... ... ... ... ... ... ... 019",
+  "020 021 022 023 024 025 026 027 028 029 030 031 032"
+]
+
+[[matrix]]
+name = "bak_main"
+grid = [
+  "033 034 035 036 037 038 039",
+  "... ... ... 040 ... ... ...",
+  "... ... ... 041 ... ... ...",
+  "... ... ... 042 ... ... ..."
+]
+
+[[matrix]]
+name = "shin_main"
+grid = [
+  "043 044 045 046 047 048 049",
+  "... ... ... 050 ... ... ...",
+  "... ... ... 051 ... ... ...",
+  "... ... ... 052 ... ... ..."
+]
+
+
+# Portals
+# NOTE: zero-padded room ids must be QUOTED here — bare 000 is invalid TOML (leading zeros).
+# The engine coerces these with int(), so "000" and 0 are equivalent; quotes just let the ids
+# stay visually aligned with the zero-padded grid.
+
+[[portal]]
+from = "000"
+from_dir = "북"
+to = "026"
+to_dir = "남"
+
+[[portal]]
+from = "026"
+from_dir = "남"
+to = "0"
+to_dir = "북"
+
+[[portal]]
+from = "016"
+from_dir = "남"
+to = "036"
+to_dir = "북"
+
+[[portal]]
+from = "036"
+from_dir = "북"
+to = "016"
+to_dir = "남"
+
+[[portal]]
+from = "017"
+from_dir = "남"
+to = "046"
+to_dir = "북"
+
+[[portal]]
+from = "046"
+from_dir = "북"
+to = "017"
+to_dir = "남"

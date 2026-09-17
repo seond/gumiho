@@ -1,0 +1,86 @@
+# ============================================================================================
+# HUNTING MAP — format reference & template.
+#
+# This file is IGNORED by the engine: the loader (gumiho/hunting_maps.py) skips any file whose
+# name starts with "_" or ".". Copy it to "<zone>.toml" and fill it in to add a real map.
+#
+# One file = one hunting map. Automated hunting uses these maps exclusively: the map's ROUTE
+# gets you from 중앙 광장 to the START room, and its MATRICES + PORTALS give a pre-known layout
+# the hunt navigates DETERMINISTICALLY (position tracked from START by commanded moves — no
+# room-identity guessing, which is what fails on same-look zones with no minimap).
+# ============================================================================================
+
+# NOTE: top-level scalars (name/start/resync_exit) MUST come BEFORE the [route] and [[matrix]]
+# tables — in TOML a table header absorbs every key that follows it.
+name = "예시 사냥터"           # REQUIRED. Hunting-zone name — shown in the ZONE dropdown and used
+                              # as the hunt target (hunt_start). Must be unique across maps.
+start = 0                     # REQUIRED. The room number the route lands at; hunting begins here.
+# Optional: the exit that ONLY the start room has, used as a landmark to re-sync position after
+# any drift/flee (default "아래"). Set to "" to disable landmark re-sync for this map.
+resync_exit = "아래"
+# Optional PER-ZONE mob BLACKLIST: names the hunt NEVER attacks in this zone (loaded when the
+# hunt arrives here). For mobs that are beatable but nasty to recover from — distinct from the
+# global [mob_danger] (too strong to survive). A name here matches a target's keyword OR
+# anywhere in its rendered line; the hunt just walks past it. e.g. blacklist = ["마왕"]  # BLIND
+blacklist = []
+
+# --- ROUTE: how to get there from 중앙 광장 -------------------------------------------------
+[route]
+name = "예시 루트"             # REQUIRED. Route name — shown in the ROUTE dropdown.
+# REQUIRED. Ordered game commands FROM 중앙 광장 to the `start` room. Directions may be the
+# single-letter shortcuts (ㅂ=북, ㄴ=남, ㄷ=동, ㅅ=서) or full words (북/남/동/서/위/아래), plus
+# any specials the path needs ("남대 열" = open the south gate, "맨 열" = open a manhole, …).
+steps = ["ㄴ", "ㄴ", "남대 열", "아래", "위"]
+
+# --- MATRICES: the layout (one or MORE) ----------------------------------------------------
+# Each matrix is a planar grid of WHITESPACE-SEPARATED cells. A cell's COLUMN is its token
+# POSITION, not its character width — so room numbers may be 2, 3, or MORE digits. Each cell:
+#   a number      -> a room (numbers are GLOBALLY UNIQUE across all matrices in this file)
+#   . / .. / ...  -> empty space (any run of dots)
+#   XX / XXX      -> a conditional-exit centre (four rooms by entry direction) — EXCLUDED from
+#                    auto edges; reach such rooms with explicit [[portal]]s if you need them
+# Edges are auto-derived as 4-neighbour grid adjacencies between numbered cells (never through
+# an XX). Just keep one space (or more) between cells and the columns line up by position; pad
+# to a common width if you want it to LOOK aligned. Use several matrices for multi-floor /
+# disconnected regions, joined by [[portal]]s.
+[[matrix]]
+name = "1층"
+grid = [
+  "00 01 02",
+  "03 .. 04",
+  "05 06 07",
+]
+
+# 3-digit rooms are fine — pad the empty/centre markers to match if you want visual alignment:
+[[matrix]]
+name = "2층"
+grid = [
+  "100 101 102",
+  "103 XXX 104",
+  "105 ... 106",
+]
+
+# --- PORTALS: explicit non-adjacent links, BOTH ways ---------------------------------------
+# For connections a grid can't express: a wormhole, or stairs between two matrices. Each portal
+# is bidirectional and names the room + direction taken FROM EACH SIDE:
+#   from `from` going `from_dir`  lands in `to`
+#   from `to`   going `to_dir`    lands back in `from`
+[[portal]]
+from = 7                       # e.g. room 07 (1층) going 위 ...
+from_dir = "위"
+to = 100                       # ... lands in room 100 (2층) ...
+to_dir = "아래"                # ... and 100 going 아래 comes back to 07.
+
+# --- DOORS: gated edges — the passage EXISTS on the map but must be OPENED to pass ----------
+# A door sits on a room's exit in a direction. Before stepping that way the hunt OPENS it, then
+# moves (the door auto-closes, so it re-opens on each traversal). Doors in this MUD have a NAME
+# and are opened by "<dir> <name> 열" (e.g. "위 하늘 열"); WITHOUT a name it falls back to the
+# generic "문 열". A door on a PORTAL edge is mirrored onto the portal's OTHER side automatically,
+# so the round-trip works from a single entry. `locked = true` needs a `key` FIRST — NOT yet
+# implemented, so a locked door just stays a wall (the far side is unreachable until keys land).
+[[door]]
+room = 3
+dir = "북"
+name = "하늘"                 # the door's in-game name -> open command "북 하늘 열" (omit -> "문 열")
+locked = false               # false -> the hunt opens it; true -> needs `key` (TODO)
+# key = "황금 열쇠"           # (for locked doors) the item that unlocks it, dropped by a zone mob

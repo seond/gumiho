@@ -1,0 +1,61 @@
+# Hunting map — 역사의 길
+name = "역사의 길"          # hunting-zone name (zone dropdown + the hunt target)
+start = "012"
+# Mobs to NEVER attack in THIS zone (loaded when the hunt arrives). Tactically nasty to fight
+# even if beatable — the hunt walks past them, never targets them. 마왕 casts a BLIND that's
+# hard to recover from. A name here matches a target's keyword OR anywhere in its rendered line.
+blacklist = ["마왕", "교황", "한웅천황"]
+# (scalars MUST sit above the [route]/[[matrix]] tables — a table header absorbs keys after it)
+
+[route]
+name = "역사의 길"          # route name (route dropdown)
+# Path FROM 중앙 광장 to the start room. Game commands: ㅂ=북 ㄴ=남 ㄷ=동 ㅅ=서, 위/아래, and
+# specials like "남대 열" (open the south gate). This is the travel route the hunt uses.
+steps = [
+  "위",
+  "위",
+  "위",
+  "ㅅ"
+]
+
+[[matrix]]
+name = "main"
+grid = [
+  "000 001 002 003 ... ... 004",
+  "... ... ... 005 ... ... 006",
+  "... ... ... 007 ... ... 008",
+  "009 010 011 012 013 014 015",
+  "016 ... ... 017 ... ... ...",
+  "018 ... ... 019 ... ... ...",
+  "020 ... ... 021 022 023 024"
+]
+
+[[matrix]]
+name = "second_floor"
+grid = [
+  "025 026 027 028 029 030 031 032",
+  "033 ... ... ... ... ... ... 034",
+  "035 ... ... ... ... ... ... 036",
+  "037 ... ... ... ... ... ... 038",
+  "039 ... ... ... ... ... ... 040",
+  "041 ... ... ... ... ... ... 042",
+  "043 ... ... ... ... ... ... 044",
+  "045 046 047 048 049 050 051 052",
+]
+
+# Portals
+# NOTE: zero-padded room ids must be QUOTED here — bare 000 is invalid TOML (leading zeros).
+# The engine coerces these with int(), so "000" and 0 are equivalent; quotes just let the ids
+# stay visually aligned with the zero-padded grid.
+
+[[portal]]
+from = "024"
+from_dir = "위"
+to = "032"
+to_dir = "아래"
+
+[[door]]
+room = "024"
+dir = "위"
+locked = false
+name = "하늘"                 # open command = "위 하늘 열" ([dir] [door name] 열)

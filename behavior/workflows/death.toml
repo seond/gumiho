@@ -1,0 +1,59 @@
+kind    = "death"
+initial = "to_morgue"
+
+# FRAMEWORK death recovery. On death the character lands at 치료실 in a RESTING state;
+# the morgue (장의사) is 아래 from there. The engine's arbiter FORCE-ENTERS this workflow
+# the instant `dead` is set (corpses rot fast — dawdling loses every item). Sequence:
+#   시체수습 (pull items off our corpse) -> re-equip (모두입어; <무기> 무장; <hold> 쥐어)
+#   -> 시체 묻어 (bury -> recover HP/MP + revive) -> 보험 (re-insure) -> regroup+reset.
+# Each stage runs its command on_enter and advances on the next prompt (commands queue
+# FIFO in the pacer, so order holds even as the states advance).
+
+[state.to_morgue]
+arm      = []
+on_enter = ["death_wake"]           # 일어 — stand out of the resting state so we can act
+step     = "go_morgue"              # at 치료실 -> 아래 (descend to the morgue)
+transition = [
+  { when = "at_morgue", goto = "salvage" },
+  { when = "stuck:60",  goto = "salvage" },   # couldn't confirm the morgue -> try anyway
+]
+
+[state.salvage]
+arm      = []
+on_enter = ["salvage_corpse"]       # 시체수습 (retrieve items from our corpse, if not rotted)
+step     = "noop"
+transition = [ { when = "always", goto = "reequip" } ]
+
+[state.reequip]
+arm      = []
+on_enter = ["reequip_gear"]         # 모두입어; <무기> 무장; <hold> 쥐어 (best-effort)
+step     = "noop"
+transition = [ { when = "always", goto = "bury" } ]
+
+[state.bury]
+arm      = []
+on_enter = ["bury_corpse"]          # 시체 묻어 — bury OUR corpse -> recover + revive
+step     = "noop"
+transition = [ { when = "always", goto = "insure" } ]
+
+[state.insure]
+arm      = []
+on_enter = ["reinsure"]             # 보험 — re-insure (consumed on death)
+step     = "noop"
+transition = [ { when = "always", goto = "done" } ]
+
+[state.done]
+arm      = []
+on_enter = ["revived_reset"]        # clear the dead flag + reset activity for a fresh run
+step     = "noop"
+transition = [
+  # Back to a hunting session: travel recalls to the anchor, reforms the duo, and returns to the
+  # hunt zone (hunt_target is preserved across the death).
+  # If the PARTNER is also dead, switch WITHOUT sync — it will self-switch to travel when its own
+  # recovery finishes (syncing a still-recovering partner would restart its death from 치료실).
+  { when = "partner_dead", switch = "travel" },
+  # Otherwise SYNC the (alive) partner into travel too, so it recalls to the anchor and regroups —
+  # else the revived character sits alone at 중앙 광장, reform never forms the duo, and it loops
+  # reform<->to_anchor forever (the "stuck at 중앙 광장 after death" bug).
+  { when = "always", switch = "travel", sync = true },
+]

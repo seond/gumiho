@@ -1,0 +1,212 @@
+kind    = "resupply"
+initial = "start"
+
+# Duo-safe resupply. Fires for both (sync from hunting). The LEADER drives the
+# whole run; the SUPPORTER just follows (tag_along) and tops up its own bottle.
+# End: auto (triggered mid-hunt) walks back to the hunt destination; manual ends
+# at 치료실. Both end together (the leader's final sync-switch pulls the supporter).
+
+[state.start]
+arm  = ["survival", "support"]
+step = "noop"
+transition = [
+  { when = "is_supporter", goto = "sup_recall" },
+  { when = "always",       goto = "recall" },
+]
+
+# --- supporter: recall to the anchor (retry — 귀환 can fail), THEN follow -----
+[state.sup_recall]
+arm      = ["survival", "support"]
+on_enter = ["do_recall"]                 # 따라 can't carry through 귀환 — recall ourselves
+step     = "retry_recall"
+transition = [
+  { when = "cant_recall", goto = "sup_rest" },   # too drained to 귀환 -> rest, don't spam-fail
+  { when = "at_anchor",   goto = "sup_follow" },
+]
+
+# Stranded with too little MV to recall (ran dry being dragged on the walk-back) -> sleep to
+# regen enough to 귀환, then retry. Prevents the 47× "이동력이 없어서 귀환할 수 없습니다" loop.
+[state.sup_rest]
+arm      = ["survival", "support"]
+on_enter = ["lie_down"]                  # 자
+step     = "noop"
+transition = [
+  { when = "in_combat",  switch = "hunting", sync = true },  # attacked while resting -> fight
+  { when = "can_recall", goto = "sup_recall" },
+  { when = "stuck:300",  goto = "sup_recall" },              # cap: MV also regens standing
+]
+
+[state.sup_follow]
+arm      = ["survival", "support"]
+on_enter = ["form_party"]                # 따라 the leader for all the walking legs
+step     = "tag_along"
+transition = [                           # normally pulled to hunting by the leader (sync),
+  # but if we got left behind (leader recalled/walked off), don't wait forever on a stale
+  # `together` — re-recall to the anchor. tag_along 봐s to keep `separated` honest.
+  { when = "separated", goto = "sup_recall" },
+]
+
+# --- leader: recall, regroup, then run the errands --------------------------
+[state.recall]
+arm      = ["survival"]
+on_enter = ["do_recall"]
+step     = "retry_recall"
+transition = [
+  { when = "cant_recall", goto = "recall_rest" },   # too drained to 귀환 -> rest first
+  # Recognise the recall landing by the 중앙 광장 landmark title, NOT a graph
+  # route to the fountain (that check broke on the polluted map / an empty
+  # [routes] and made recall retry-then-fail). The fountain leg walks a fixed
+  # macro from here anyway.
+  { when = "at_anchor",        goto = "recall_regroup" },
+]
+
+[state.recall_rest]
+arm      = ["survival"]
+on_enter = ["lie_down"]                  # 자 to regen enough MV to recall
+step     = "noop"
+transition = [
+  { when = "in_combat",  switch = "hunting", sync = true },
+  { when = "can_recall", goto = "recall" },
+  { when = "stuck:300",  goto = "recall" },
+]
+
+[state.recall_regroup]
+arm      = ["survival", "support"]
+on_enter = ["form_party"]                # wait for supporter to recall+follow AND for
+step     = "look"                         # both to regain move points before walking
+transition = [
+  { when = "ready_to_walk", goto = "goto_fountain" },
+  { when = "stuck:180",     goto = "goto_fountain" },   # cap: don't hang forever
+]
+
+[state.goto_fountain]
+arm      = ["survival"]
+on_enter = ["enter_goto_fountain"]
+step     = "goto_step"
+transition = [
+  { when = "arrived",   goto = "refill" },
+  { when = "stuck:45",  goto = "recall" },   # leg stranded (derailed off the macro) -> re-recall & retry
+]
+
+[state.refill]
+arm      = ["survival"]
+on_enter = ["refill_bottle"]             # top up the bottle, then drink the fountain
+step     = "drink_fountain"               # to full (also resolves hunger)
+transition = [ { when = "drank_enough", goto = "check_provisions" } ]
+
+# --- stock 시루떡 at 한성 떡집 (side-branch off the fountain; round-trip) ---------
+[state.check_provisions]
+arm      = ["survival"]
+on_enter = ["inspect_bag"]               # 소지품 — read how many 시루떡 we hold
+step     = "noop"
+transition = [
+  { when = "have_provisions", goto = "inspect_gear" },   # already >= target -> skip 떡집
+  { when = "need_provisions", goto = "goto_bakery" },
+]
+
+[state.goto_bakery]
+arm      = ["survival"]
+on_enter = ["enter_goto_bakery"]         # fountain -> 떡집 leg (macro prefix stripped)
+step     = "shop_goto_step"               # walk WITHOUT recording into the main trail
+transition = [
+  { when = "arrived",   goto = "buy_provisions" },
+  { when = "stuck:45",  goto = "recall" },
+]
+
+[state.buy_provisions]
+arm      = ["survival"]
+step     = "buy_provisions"               # '시루떡 사' up to target, one per tick
+transition = [ { when = "bought_enough", goto = "bakery_back" } ]
+
+[state.bakery_back]
+arm      = ["survival"]
+on_enter = ["enter_bakery_back"]         # reverse the 떡집 leg back to the fountain
+step     = "shop_goto_step"
+transition = [
+  { when = "arrived",   goto = "inspect_gear" },
+  { when = "stuck:45",  goto = "recall" },
+]
+
+[state.inspect_gear]
+arm      = ["survival"]
+on_enter = ["inspect_gear"]
+step     = "noop"
+transition = [
+  { when = "repair_needed",    goto = "goto_smith" },
+  { when = "no_repair_needed", goto = "walk_back"  },
+]
+
+[state.goto_smith]
+arm      = ["survival"]
+on_enter = ["enter_goto_smith"]
+step     = "goto_step"
+transition = [
+  { when = "arrived",   goto = "repair" },
+  { when = "stuck:45",  goto = "recall" },
+]
+
+[state.repair]
+arm      = ["survival"]
+step     = "repair_step"
+transition = [ { when = "repairs_done", goto = "walk_back" } ]
+
+# Reverse the trail back to the 중앙 광장 anchor.
+[state.walk_back]
+arm      = ["survival"]
+on_enter = ["enter_walk_back"]
+step     = "goto_step"
+transition = [
+  { when = "arrived",   goto = "after_supply" },
+  { when = "stuck:45",  goto = "recall" },   # stranded heading home -> recall to the anchor & retry
+]
+
+[state.after_supply]
+arm      = ["survival", "support"]
+on_enter = ["mark_resupplied"]
+step     = "noop"
+transition = [
+  { when = "auto_cycle", goto = "go_home" },     # mid-hunt: return to the zone
+  { when = "always",     goto = "goto_clinic" }, # manual: end at 치료실
+]
+
+# --- auto: walk the recorded route back to the hunt destination -------------
+[state.go_home]
+arm      = ["survival"]
+on_enter = ["load_hunt_route"]
+step     = "route_step"                 # leader walks; the follower is dragged by 따라
+transition = [
+  { when = "no_route",   goto = "failed" },
+  { when = "route_done", goto = "resume_hunt" },
+  { when = "stuck:120",  goto = "resume_hunt" },   # follower lost — regroup at destination
+]
+
+[state.resume_hunt]
+arm      = ["survival", "support"]
+on_enter = ["reset_sweep", "form_party"]  # relocated during resupply -> fresh zone map
+step     = "look"                        # 봐 so party_ready can see the partner
+transition = [
+  { when = "party_ready", switch = "hunting", sync = true },
+  { when = "stuck:60",    switch = "hunting", sync = true },   # don't deadlock; hunting re-pairs
+]
+
+# --- manual: end at 치료실 ---------------------------------------------------
+[state.goto_clinic]
+arm      = ["survival"]
+on_enter = ["enter_goto_clinic"]
+step     = "goto_step"
+transition = [
+  { when = "arrived",   goto = "done" },
+  { when = "stuck:45",  goto = "done" },   # manual end: don't hang if the clinic leg strands
+]
+
+[state.done]
+arm      = []
+on_enter = ["halt"]
+step     = "noop"
+transition = []
+
+[state.failed]
+arm      = []
+on_enter = ["fail_resupply"]
+step     = "noop"
+transition = []

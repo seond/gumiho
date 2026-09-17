@@ -1,0 +1,38 @@
+kind    = "wait"
+initial = "recover"
+
+# Zone exhausted. First SLEEP to recover (both characters), released the moment
+# both are fully recovered (12s poll). Then wait out the regen window and RE-SWEEP
+# the whole pocket (walking every room IS how regenerated mobs are found — they
+# spawn silently in place, so polling 봐 in one spot never sees them).
+
+[state.recover]
+arm      = ["survival"]
+on_enter = ["wait_doze"]                        # 자 ONLY if not already recovered (else no sleep)
+step     = "noop"
+transition = [
+  { when = "dozed_and_recovered", goto = "wake" },    # actually slept + now recovered -> 깨
+  { when = "both_recovered",      goto = "watch" },    # already full on entry -> straight to watch
+                                                       # (no 자, no 깨: kills the 자-깨 storm)
+  { when = "stuck:600",           goto = "wake" },     # cap: don't sleep forever
+]
+
+[state.wake]
+arm      = []
+on_enter = ["wake_up", "reset_barren"]
+step     = "noop"
+transition = [
+  { when = "standing", goto = "watch" },
+]
+
+[state.watch]
+arm      = ["survival", "support"]
+step     = "noop"                                # just wait out the regen window
+transition = [
+  { when = "mobs_present",   switch = "hunting",  sync = true },  # a mob wandered in -> hunt
+  { when = "gear_worn",      switch = "resupply", sync = true },  # gear <= repair threshold -> repair
+  { when = "needs_resupply", switch = "resupply", sync = true },  # hungry/thirsty/bottle-dry/gear worn
+  # NO unconditional timer here: a cleared+recovered zone with no real need must
+  # NOT go to town (that infinite-looped hunt<->town and drained MV mid-walk).
+  { when = "regen_elapsed",  switch = "hunting",  sync = true },  # window up -> RE-SWEEP the pocket
+]

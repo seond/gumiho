@@ -1,0 +1,33 @@
+# Hunting map — 올림푸스 신전. One planar floor: 4 3x3 squares joined by a central cross; the
+# four XX cells are conditional-exit centres (excluded); the route lands dead-centre at room 20.
+name = "올림푸스 신전"          # hunting-zone name (zone dropdown + the hunt target)
+start = 20                     # 올림푸스로 가는길 — the room the route lands at; hunting starts here
+# (scalars MUST sit above the [route]/[[matrix]] tables — a table header absorbs keys after it)
+
+[route]
+name = "올림푸스 신전"          # route name (route dropdown)
+# Path FROM 중앙 광장 to the start room. Game commands: ㅂ=북 ㄴ=남 ㄷ=동 ㅅ=서, 위/아래, and
+# specials like "남대 열" (open the south gate). This is the travel route the hunt uses.
+steps = [
+  "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "남대 열",
+  "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ", "ㄴ",
+  "ㅅ", "아래", "위", "위",
+]
+
+[[matrix]]
+name = "main"
+grid = [
+  ".. .. .. .. 00 01 02 .. .. .. ..",
+  ".. .. .. .. 03 XX 04 .. .. .. ..",
+  ".. .. .. .. 05 06 07 .. .. .. ..",
+  ".. .. .. .. .. 08 .. .. .. .. ..",
+  "09 10 11 .. .. 12 .. .. 13 14 15",
+  "16 XX 17 18 19 20 21 22 23 XX 24",
+  "25 26 27 .. .. 28 .. .. 29 30 31",
+  ".. .. .. .. .. 32 .. .. .. .. ..",
+  ".. .. .. .. 33 34 35 .. .. .. ..",
+  ".. .. .. .. 36 XX 37 .. .. .. ..",
+  ".. .. .. .. 38 39 40 .. .. .. ..",
+]
+
+# No portals (single planar floor) and no doors here — see _example.toml for those.

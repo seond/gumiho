@@ -1,0 +1,8 @@
+name = "support"
+reflex = [
+  { when = "has_spell_request", do = "cast_requested_spell", priority = 150 },
+  # keep up with a FLEEING leader — GENERAL, any hunt (a leader can 도망 any fight). The supporter
+  # reads the flee direction off the departure line and steps in to regroup. High priority so it
+  # reunites at once, above the routine spell cast; self-clearing (only while apart + a known dir).
+  { when = "partner_fled",      do = "chase_partner",       priority = 170 },
+]

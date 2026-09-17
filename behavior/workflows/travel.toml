@@ -1,0 +1,94 @@
+kind    = "travel"
+initial = "to_anchor"
+
+# Get to the hunt zone from anywhere: recall to 중앙 광장, replay the recorded
+# route, regroup, hunt. Used to return after a resupply run (and as the full-cycle
+# entry). Needs knowledge [travel_routes]."<hunt zone>" recorded.
+
+[state.to_anchor]
+arm      = ["survival"]
+on_enter = ["travel_recall"]               # 귀환 — but skipped if already home / no MV
+step     = "retry_recall"
+transition = [
+  # Recall FIRST, rest at the anchor SECOND. 귀환 is a cheap teleport, so only a truly
+  # empty MV bar (cant_recall) forces a rest-in-place here; otherwise we recall to the
+  # anchor and reform's mv_low gate rests both TOGETHER before the walk. (The old
+  # mv_low<150 gate here made a drained follower sleep STRANDED at the zone.)
+  { when = "cant_recall",      goto = "recover_mv" },
+  # 중앙 광장 is a unique landmark — recognise arrival by its own name, NOT by a
+  # graph route to the fountain (the polluted map can't always find one, which
+  # used to fail the whole run right after recall).
+  { when = "at_anchor",        goto = "reform" },
+]
+
+# Move points exhausted: sleep to regenerate them (the safest place is the town
+# anchor we just recalled to). Released only when BOTH characters can travel again —
+# the follower spends MV being dragged along too, so a still-drained partner would
+# drop the 따라 mid-route.
+[state.recover_mv]
+arm      = ["survival"]
+on_enter = ["lie_down"]                     # 자 — regenerates HP/MP/MV
+step     = "noop"
+transition = [
+  { when = "in_combat", switch = "hunting", sync = true },   # attacked while resting -> fight
+  { when = "mv_ready",  goto = "wake_travel" },
+  { when = "stuck:600", goto = "wake_travel" },   # cap: MV also regens standing
+]
+
+[state.wake_travel]
+arm      = []
+on_enter = ["wake_up"]                      # 깨/일 — stand up, then re-assess from to_anchor
+step     = "noop"
+transition = [
+  { when = "standing", goto = "to_anchor" },
+]
+
+[state.reform]
+arm      = ["survival"]
+on_enter = ["form_party"]                  # 모두 그룹 (leader) + <leader> 따라 + 자동지원
+step     = "look"                          # 봐 to render + confirm co-location
+transition = [                             # (supporter). The 따라 then carries the supporter
+  { when = "mv_low",       goto = "recover_mv" },  # not enough MV for the trip -> rest first
+  { when = "group_formed", goto = "run_route" },   # 따라 active + co-located -> leader walks
+  { when = "stuck:45",     goto = "to_anchor" },   # can't form up -> re-recall & retry
+]
+
+[state.run_route]
+arm      = ["survival"]
+on_enter = ["load_hunt_route"]
+step     = "route_step"                    # LOCKSTEP: both walk the route in sync
+transition = [
+  { when = "no_route",   goto = "failed" },
+  # A route MOVE was refused past the retry cap -> the walk fell off the deterministic
+  # path. Re-recall to the anchor and re-walk from a known spot, rather than let the
+  # leftover steps finish the route in the wrong room (the 주막집 0-kill dump).
+  { when = "route_derailed", goto = "to_anchor" },
+  { when = "route_done", goto = "arrive" },
+  # Genuinely separated (debounced) -> re-recall to the anchor. Catches a follower that got
+  # left behind (leader recalled / walked off) instead of it sitting on a stale `together`
+  # waiting to be dragged forever — the 중앙 광장 deadlock. route_step 봐s to keep this fresh.
+  { when = "separated",  goto = "to_anchor" },
+  # Only bail when GENUINELY out of MV (can't step) — NOT the 150 start-threshold,
+  # which the first step would cross (moves cost ~1 MV each) and restart the route.
+  { when = "mv_stuck",   goto = "recover_mv" },   # ran dry mid-route -> rest, recall, re-walk
+  { when = "stuck:120",  goto = "reform" },   # desynced too long -> recall & retry
+]
+
+[state.arrive]
+arm      = ["survival"]
+on_enter = ["reset_sweep", "form_party"]    # fresh zone map here; establish 따라 for the sweep
+step     = "look"                           # 봐 so party_ready can see the partner
+transition = [
+  # Defense-in-depth: never hand a TOWN arrival to hunting. If we're still at the
+  # anchor, the route didn't deliver us — retry travel instead of switching to
+  # hunting (whose at_town gate would just switch us back = the ping-pong loop).
+  { when = "at_town",     goto   = "reform" },
+  { when = "party_ready", switch = "hunting", sync = true },
+  { when = "stuck:45",    goto   = "reform" },
+]
+
+[state.failed]
+arm      = []
+on_enter = ["fail_travel"]
+step     = "noop"
+transition = []

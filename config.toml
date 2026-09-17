@@ -1,0 +1,32 @@
+[server]
+host = "ggai.tv"
+port = 4000
+encoding = "euc-kr"
+
+[logging]
+dir = "logs"
+
+[gui]
+port = 8642
+
+[llm]
+host = "http://127.0.0.1:11434"
+model = "qwen3:8b"
+consult_cooldown = 18.0
+
+[reflex]
+flee_at_pct = 40
+flee_command = "도망"
+heal_at_pct = 55   # potion choice comes from knowledge/potions.toml
+rest_at_mv = 8
+rest_command = "쉬어"
+
+[walker]
+step_delay_min = 0.8
+step_delay_max = 2.2
+max_depth = 6
+max_steps = 40
+min_hp_pct = 60
+resume_hp_pct = 90
+sleep_poll_seconds = 25
+hunt_targets = ["벌", "거미", "개"]

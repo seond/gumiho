@@ -1,0 +1,12 @@
+name = "survival"
+reflex = [
+  { when = "should_drink_hp:50", do = "drink_hp_potion", priority = 100 },
+  { when = "should_drink_mp:40", do = "drink_mp_potion", priority = 90  },
+  # Thirsty/hungry in the field -> consume our own bottle (버드 마셔) / 시루떡 (시루떡
+  # 먹어) so they rarely force a town trip. Guarded/throttled in the should_* guards.
+  { when = "should_field_drink", do = "field_drink",     priority = 80  },
+  { when = "should_field_eat",   do = "field_eat",       priority = 75  },
+  # Latch "rest needed" the instant vitals go low (no command sent) — so it is
+  # honoured after the current battle even if we can't sleep during it.
+  { when = "needs_rest_flag",    do = "flag_rest",       priority = 10  },
+]

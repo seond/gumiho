@@ -1,0 +1,68 @@
+kind    = "hunting"
+initial = "regroup"
+
+# Always pair up before (and whenever we lose) the supporter: 따라/그룹/자동지원 and
+# wait until we can actually see each other. If we can't re-pair here (stuck in
+# different rooms), fall back to travel, which recalls both and reunites.
+[state.regroup]
+arm      = ["survival", "support"]
+on_enter = ["form_party"]
+step     = "look"                          # 봐 to render the room so we can SEE the partner
+transition = [
+  # NEVER hunt in a town/anchor room. If we somehow start (or land back) here — a
+  # recall, a botched travel, a manual move — go straight to travel, which rests up
+  # and walks us into the zone. This is what stopped the 게시판-attack / 자-깨 loop.
+  { when = "at_town",     switch = "travel", sync = true },
+  { when = "party_ready", goto   = "ensure_buffs" },
+  { when = "stuck:25",    switch = "travel", sync = true },
+]
+
+[state.ensure_buffs]
+arm      = ["survival", "support"]
+on_enter = ["mark_cycle", "request_missing_buffs"]   # cycle active: resupply returns here;
+step     = "noop"                                     # first 방비! ask goes out here
+transition = [
+  # Don't BLOCK on the buff — head into the hunt immediately and keep re-asking from
+  # hunt_step until it's confirmed. Blocking here stalled the whole party whenever
+  # the supporter missed the request (asleep / mid-regroup).
+  { when = "always", goto = "clear_room" },
+]
+
+[state.clear_room]
+arm  = ["survival", "combat", "support"]
+step = "hunt_step"                       # attack next mob (re-asking buffs), else advance
+transition = [
+  { when = "separated",       goto   = "regroup"               },
+  # Rest only once the battle is OVER (rest_ready = latched low-vitals + safe),
+  # so we never switch mid-fight into a 자 the server refuses. We keep fighting
+  # while low; the latch remembers to rest the moment it's safe.
+  { when = "rest_ready",      switch = "rest",     sync = true  },
+  { when = "gear_worn",       switch = "resupply", sync = true  },  # repair before it breaks
+  { when = "needs_resupply",  switch = "resupply", sync = true  },
+  # Zone swept clean -> decide rotate-vs-wait in `swept` (below). One target for both the
+  # single-zone and circuit cases so the decision (and the clear-time stamp) live in one place.
+  { when = "area_barren",     goto   = "swept"                  },
+]
+
+# Zone swept empty. Stamp its clear-time, then EITHER rotate to the next circuit zone (only if
+# that zone has had a respawn window to repopulate — circuit_ready) OR fall to the bounded
+# `wait` (single zone, or the next zone is ALSO freshly empty). This can never get stuck: `wait`
+# always exits (regen_elapsed / mobs_present) and by the next barren the other zone has had a
+# full window to respawn, so circuit_ready then flips true and we rotate.
+[state.swept]
+arm      = ["survival", "support"]
+on_enter = ["mark_zone_cleared"]          # record when THIS zone went empty
+step     = "noop"
+transition = [
+  { when = "circuit_ready", goto   = "rotate"               },  # next zone respawned -> go hunt it
+  { when = "always",        switch = "wait", sync = true    },  # single zone / next still empty -> wait
+]
+
+# Rotate the circuit to the next zone, then hand off to travel (recall + route + arrival).
+[state.rotate]
+arm      = ["survival", "support"]
+on_enter = ["advance_circuit"]            # bump the circuit index + retarget the hunt (both duo)
+step     = "noop"
+transition = [
+  { when = "always", switch = "travel", sync = true },   # travel walks us to the new zone
+]

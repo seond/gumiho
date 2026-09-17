@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>gumiho</title>
+<style>
+  :root {
+    /* phosphor operator console — deliberate tonal steps, not one muddy green */
+    --screen: #080c0a;      /* deepest: the game-text "screen" */
+    --bg: #0a0f0d;          /* console void */
+    --panel: #111a15;       /* raised chrome: appbar, header, sidebar, input bar */
+    --panel2: #0e1611;      /* recessed nested cards / supporter bars */
+    --line: #21302a;        /* hairline */
+    --line2: #2e4239;       /* stronger divider / control border */
+    --ink: #dbeae0;         /* primary text */
+    --dim: #8aa294;         /* secondary */
+    --faint: #5f7669;       /* tertiary / micro-labels */
+    --accent: #54d9a4;      /* phosphor signal (online, headings) */
+    --accent-deep: #1e5f47;
+    --warn: #e8b65c; --bad: #ee6f62; --sent: #86b8e8; --ai: #bb93ea;
+    --hp: #58cf93; --mp: #66b0f0; --mv: #e8b65c; --iron: #c6cfdd;
+    --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic",
+            "Segoe UI", system-ui, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, Menlo, monospace;
+    --glow: 0 0 10px rgba(84,217,164,.30);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 12.5px; -webkit-font-smoothing: antialiased;
+    height: 100vh; display: grid; grid-template-rows: auto 1fr;
+  }
+  /* thin, dark scrollbars everywhere (the default chunky ones read as unstyled) */
+  * { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a5145; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  #appbar {
+    display: flex; align-items: center; gap: 12px; padding: 7px 14px;
+    background: linear-gradient(var(--panel), #0d150f);
+    border-bottom: 1px solid var(--line2);
+  }
+  #appbar h1 {
+    font-size: 14px; margin: 0; color: var(--accent); font-weight: 700;
+    letter-spacing: .04em; text-shadow: var(--glow);
+  }
+  #appbar .hint { color: var(--dim); font-size: 11px; }
+  #appbar .lanaddr {
+    margin-left: auto; font-size: 11px; font-family: var(--mono); cursor: pointer;
+    color: var(--accent); background: var(--screen); padding: 3px 9px; border-radius: 5px;
+    border: 1px solid var(--line2); white-space: nowrap; transition: border-color .15s, box-shadow .15s;
+  }
+  #appbar .lanaddr:hover { border-color: var(--accent); box-shadow: var(--glow); }
+  #panes { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: 0; }
+  .pane {
+    display: grid; min-width: 0; min-height: 0; position: relative;
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-columns: 1fr 250px;
+    grid-template-areas: "phead phead" "ptick ptick" "pout pside" "pin pside";
+    border-right: 1px solid var(--line2);
+  }
+  .pane:last-child { border-right: none; }
+  .phead {
+    grid-area: phead; display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; background: var(--panel); min-height: 46px;
+    border-bottom: 1px solid var(--line2); flex-wrap: wrap;
+  }
+  .phead .who { font-weight: 700; color: var(--accent); letter-spacing: .01em; }
+  /* status: a state dot + word, quiet by default, lit when online */
+  .status {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px;
+    border-radius: 999px; background: var(--screen); color: var(--dim);
+    font-size: 11px; border: 1px solid var(--line2);
+  }
+  .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
+  .status.online { background: rgba(84,217,164,.10); color: var(--accent); border-color: var(--accent-deep); }
+  .status.online::before { box-shadow: var(--glow); }
+  .status.logging-in, .status.connecting { background: rgba(232,182,92,.10); color: var(--warn); border-color: #5a4a22; }
+  .wfbadge { padding: 2px 9px; border-radius: 999px; background: rgba(187,147,234,.12);
+    color: var(--ai); border: 1px solid #3c3357; font-size: 11px; display: none; }
+  .wfbadge.on { display: inline-block; }
+  .battle { color: var(--bad); font-weight: 700; display: none; letter-spacing: .02em; }
+  .vmini { color: var(--faint); font-size: 11px; font-family: var(--mono); }
+  button {
+    background: var(--line); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 5px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  button:hover { background: #2b3a32; border-color: #3a5145; }
+  button.danger { color: var(--bad); }
+  button.danger:hover { border-color: #5a3230; background: rgba(238,111,98,.10); }
+  button.primary { color: var(--ai); border-color: #3c3357; }
+  button.primary.on { background: rgba(187,147,234,.16); color: #d9c6fb; border-color: #6a51a0; box-shadow: 0 0 10px rgba(187,147,234,.25); }
+  .out {
+    grid-area: pout; overflow-y: auto; padding: 10px 12px; min-width: 0;
+    background: var(--screen); font-family: var(--mono); font-size: 12.5px;
+    white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5;
+    box-shadow: inset 0 8px 12px -10px rgba(0,0,0,.7);
+  }
+  .out .sent { color: var(--sent); } .out .sent::before { content: ""; }
+  .out .info { color: var(--accent); }
+  .out .error { color: var(--bad); }
+  .zonemap {
+    position: absolute; z-index: 6; display: none; flex-direction: column;
+    /* fixed to the full width of the text console (left edge -> side panel) and a
+       consistent height, so the panel is always the same size regardless of zone. */
+    top: 66px; left: 8px; right: 258px; height: 46%;   /* below the header (46px) + tick meter (20px) */
+    background: rgba(10,15,13,.72); border: 1px solid var(--line2);
+    border-radius: 8px; padding: 8px 10px; backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    font-size: 11px; color: var(--ink); overflow: hidden;
+  }
+  .zonemap.on { display: flex; }
+  .zmhead { flex: none; display: flex; justify-content: space-between; gap: 12px; color: var(--dim); margin-bottom: 6px;
+    font-size: 10px; letter-spacing: .1em; }
+  .zmhint { color: var(--warn); }
+  /* centers the room grid both ways in the panel; scrolls if a zone outgrows it */
+  .zmwrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; }
+  .zmgrid { position: relative; flex: none; margin: 2px; }
+  /* known path between two rooms (an edge from the 지도) */
+  .zmedge { position: absolute; background: var(--accent); opacity: .45; border-radius: 2px; }
+  .zmcell {
+    position: absolute; width: 30px; height: 30px; box-sizing: border-box;
+    border: 1px solid var(--line2); border-radius: 4px; background: rgba(33,48,42,.4);
+    display: flex; align-items: center; justify-content: center; z-index: 1; font-family: var(--mono);
+  }
+  .zmcell.visited { background: rgba(30,95,71,.55); }
+  .zmcell.here { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset, var(--glow); }
+  .zmcell.avoid { background: rgba(120,36,36,.8); border-color: var(--bad); }
+  .zmcell input { margin: 0; cursor: pointer; accent-color: var(--bad); }
+  .zmcell.svnum { font: 600 11px/1 var(--mono); color: var(--dim); }
+  .zmcell.svnum.visited { color: #cfe9dc; }
+  .zmcell.svnum.here { color: var(--accent); }
+  .inrow {
+    grid-area: pin; padding: 8px 10px; background: var(--panel); border-top: 1px solid var(--line2);
+  }
+  input {
+    width: 100%; background: var(--screen); color: var(--ink); font-family: var(--mono);
+    border: 1px solid var(--line2); border-radius: 5px; padding: 7px 9px; font-size: 12.5px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow); }
+  input::placeholder { color: var(--faint); }
+  .side {
+    grid-area: pside; background: var(--panel); border-left: 1px solid var(--line2);
+    overflow-y: auto; padding: 12px 11px; display: flex; flex-direction: column; gap: 14px;
+    font-size: 12px; min-width: 0;
+  }
+  /* section eyebrow: a phosphor tick + tracked label (Korean has no case; not ALL-CAPS chrome) */
+  .lbl { color: var(--faint); font-size: 10px; letter-spacing: .16em; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px; }
+  .lbl::before { content: ""; width: 5px; height: 5px; border-radius: 1px; background: var(--accent-deep); }
+
+  /* --- vitals as an instrument cluster: LABEL · track · value/max on one row --- */
+  .stats { display: flex; flex-direction: column; gap: 7px; }
+  .stat { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 9px; }
+  .stat-top { display: contents; }
+  .stat-k { color: var(--dim); font-size: 10px; letter-spacing: .1em; }
+  .stat-bar { height: 9px; background: var(--screen); border-radius: 5px; overflow: hidden;
+    border: 1px solid var(--line); }
+  .stat-bar i { display: block; height: 100%; border-radius: 5px; transition: width .3s; }
+  .stat.hp .stat-bar i { background: linear-gradient(90deg, var(--accent-deep), var(--hp)); box-shadow: var(--glow); }
+  .stat.mp .stat-bar i { background: linear-gradient(90deg, #1d4a72, var(--mp)); }
+  .stat.mv .stat-bar i { background: linear-gradient(90deg, #6b5220, var(--mv)); }
+  .stat-bar.low i { background: var(--bad) !important; box-shadow: 0 0 10px rgba(238,111,98,.4) !important; }
+  .stat-num { font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums;
+    color: var(--faint); text-align: right; white-space: nowrap; }
+  .stat-num b { font-size: 14px; font-weight: 700; }
+  .stat.hp .stat-num b { color: var(--hp); } .stat.mp .stat-num b { color: var(--mp); } .stat.mv .stat-num b { color: var(--mv); }
+  /* --- 철면 (iron-skin) countdown: hidden unless active; steel bar that depletes left, blinks red <3s --- */
+  .stat.iron { display: none; }                 /* shown by JS only while 철면 is up */
+  .stat.iron .stat-bar { flex: 1; }             /* renderIron shows the row as display:flex (overrides
+                                                   the grid), so the bar needs flex-fill to stretch */
+  .stat.iron .stat-k { color: var(--iron); }
+  .stat.iron .stat-bar i { background: linear-gradient(90deg, #6b7180, var(--iron)); transition: width .1s linear; box-shadow: none; }
+  .stat.iron .stat-num b { color: var(--iron); }
+  .stat.iron.ending .stat-bar i { animation: iron-blink .5s steps(1,end) infinite; }
+  .stat.iron.ending .stat-k, .stat.iron.ending .stat-num b { color: var(--bad); }
+  @keyframes iron-blink { 0%,50% { background: var(--bad); } 50.01%,100% { background: transparent; } }
+  /* --- master ~74.5s tick meter: full-width thin bar under the pane header --- */
+  .tickmeter { grid-area: ptick; position: relative; height: 20px; width: 100%; background: var(--screen);
+    border-bottom: 1px solid var(--line); overflow: hidden; display: none; }
+  .tickmeter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); opacity: .22; transition: width .1s linear; }
+  .tickmeter > .tl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                     font-size: 10px; letter-spacing: .18em; color: var(--faint); pointer-events: none; font-family: var(--mono); }
+  .tickmeter.syncing > i { width: 100%; opacity: .10;
+                     background: repeating-linear-gradient(45deg, var(--dim) 0 8px, transparent 8px 16px);
+                     animation: tick-sync 1.1s linear infinite; }
+  .tickmeter.syncing > .tl { color: var(--mv); }
+  @keyframes tick-sync { from { background-position: 0 0; } to { background-position: 22.6px 0; } }
+
+  /* --- level / xp / cash readout --- */
+  .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 10px; }
+  .meta .lvl { font-size: 16px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .meta .xp { color: var(--dim); font-size: 11px; font-family: var(--mono); }
+  .meta .cash { font-size: 14px; font-weight: 700; color: var(--warn); font-family: var(--mono); }
+  .meta .cond { color: var(--warn); font-size: 11px; }
+  .job { color: var(--warn); font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(232,182,92,.12); border: 1px solid #5a4a22; display: none; }
+  .job.on { display: inline-block; }
+
+  .room { font-weight: 700; font-size: 13px; }
+  .zone { color: var(--dim); font-size: 11.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .chips button { padding: 2px 10px; color: var(--accent); border-color: var(--accent-deep); font-family: var(--mono); }
+  .chips button:hover { background: rgba(84,217,164,.12); border-color: var(--accent); }
+  ul { margin: 4px 0 0; padding-left: 15px; color: var(--dim); }
+  ul li { margin-bottom: 3px; }
+  .shopnote { color: var(--faint); font-size: 9.5px; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+  ul.shop li { color: var(--warn); }
+  ul.shop li::marker { content: "🛒 "; }
+  ul.shop li .shopdel { margin-left: 6px; padding: 0 5px; font-size: 10px; line-height: 1.5; vertical-align: middle; }
+  .svnote { color: var(--faint); font-size: 9.5px; letter-spacing: 0; }
+  .svframe { position: relative; margin: 6px 0; }
+  .svframe + .svframe { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+  .svcell { position: absolute; width: 20px; height: 15px; font-size: 8.5px; line-height: 15px;
+    text-align: center; background: var(--line); border-radius: 3px; color: var(--dim); font-family: var(--mono); }
+  .svcell.cur { background: var(--accent); color: #06301c; font-weight: 700; }
+  .svcell.swept { opacity: .5; }
+  .svedge { position: absolute; background: var(--dim); opacity: .45; }
+  .svportal { color: var(--warn); font-size: 10px; margin: 3px 0 0; letter-spacing: 0; }
+  li::marker { color: var(--accent-deep); }
+  button.mini { padding: 1px 7px; font-size: 10.5px; margin-left: 3px; border-radius: 4px; vertical-align: 1px; }
+  button.mini.atk { color: var(--bad); border-color: #5a3230; }
+  .huntrow { display: flex; gap: 5px; align-items: center; margin-top: 2px; }
+  .labsel {
+    flex: 1; min-width: 0; background: var(--screen); color: var(--ink);
+    border: 1px solid var(--line2); border-radius: 5px; padding: 4px; font: inherit; font-size: 11px;
+  }
+  .labsel:focus { outline: none; border-color: var(--accent); }
+  .labrow { display: flex; gap: 5px; margin-bottom: 5px; align-items: center; }
+  .labtag { color: var(--faint); font-size: 10px; width: 42px; flex: none; text-align: right; }
+  .lab-ok { color: var(--accent); } .lab-bad { color: var(--bad); }
+  .comms { max-height: 130px; overflow-y: auto; }
+  .comms div { margin-bottom: 4px; color: var(--dim); }
+  .comms b { color: var(--ink); font-weight: 600; }
+  .comms .k { color: var(--warn); }
+
+  /* --- collapsible advanced panels --- */
+  details.panel { border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); }
+  details.panel > summary {
+    cursor: pointer; list-style: none; padding: 7px 9px; color: var(--faint);
+    font-size: 10px; letter-spacing: .14em;
+    display: flex; align-items: center; gap: 7px; user-select: none;
+  }
+  details.panel > summary:hover { color: var(--dim); }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary::before { content: "▸"; color: var(--accent); font-size: 9px; }
+  details.panel[open] > summary::before { content: "▾"; }
+  details.panel > .body { padding: 4px 9px 9px; }
+  .subnote { color: var(--dim); font-size: 10.5px; margin-top: 3px; font-family: var(--mono); }
+  /* character-select modal — offered when nothing is connected */
+  #charmodal {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(10, 14, 12, .72);
+  }
+  #charmodal.on { display: flex; }
+  #charmodal .box {
+    background: var(--panel); border: 1px solid var(--line2); border-radius: 12px;
+    padding: 20px 22px 18px; min-width: 360px; box-shadow: 0 16px 48px rgba(0,0,0,.6);
+  }
+  #charmodal h2 { margin: 0 0 5px; font-size: 15px; color: var(--accent); font-weight: 700; text-shadow: var(--glow); }
+  #charmodal .sub { color: var(--dim); font-size: 11px; margin-bottom: 14px; }
+  #charmodal .row { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+  #charmodal .row label { width: 58px; color: var(--faint); font-size: 11px; letter-spacing: .1em; }
+  #charmodal select {
+    flex: 1; background: var(--screen); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 7px 9px; font: inherit;
+  }
+  #charmodal select:focus { outline: none; border-color: var(--accent); }
+  #charmodal .actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+  #charmodal button {
+    background: var(--line); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 7px 15px; font: inherit; cursor: pointer;
+  }
+  #charmodal button.primary { background: rgba(84,217,164,.14); color: var(--accent); border-color: var(--accent-deep); }
+  #charmodal button.primary:hover:not(:disabled) { box-shadow: var(--glow); }
+  #charmodal button.primary:disabled { opacity: .4; cursor: default; }
+  #charmodal .warn { color: var(--warn); font-size: 11px; min-height: 14px; margin-top: 8px; }
+  /* right half — supporters column: stacked sections, each = status bar + console */
+  #supcol { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #suphead {
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px; min-height: 46px;
+    background: var(--panel); border-bottom: 1px solid var(--line2);
+  }
+  #suphead .t { font-weight: 700; color: var(--accent); letter-spacing: .01em; }
+  #suphead button {
+    background: var(--line); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 5px; padding: 4px 11px; font: inherit; cursor: pointer;
+  }
+  #suphead button:hover { background: #2b3a32; }
+  #supadd { display: none; align-items: center; gap: 6px; }
+  #supadd.on { display: flex; }
+  #supadd select {
+    background: var(--screen); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 5px; padding: 4px 7px; font: inherit;
+  }
+  #suplist { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #suplist .empty { color: var(--faint); padding: 22px; font-size: 12px; line-height: 1.6; }
+  .sup { flex: 1; display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--line2); }
+  .sup:last-child { border-bottom: none; }
+  .supbar {
+    display: flex; align-items: center; gap: 7px 11px; padding: 7px 11px;
+    background: var(--panel2); border-bottom: 1px solid var(--line);
+    font-size: 12px; flex-wrap: wrap;
+  }
+  .supbar .nm { font-weight: 700; color: var(--accent); }
+  .supbar .kv { color: var(--dim); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+  .supbar .kv b { color: var(--ink); font-weight: 700; }
+  .supbar .msep { width: 1px; align-self: stretch; background: var(--line2); }
+  .supbar .battle.on { display: inline; }
+  /* group-inclusion toggle: a small phosphor checkbox + 그룹 label */
+  .grpchk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--faint);
+    font-size: 10px; letter-spacing: .06em; user-select: none; }
+  .grpchk input { width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+  .grpchk:has(input:checked) { color: var(--accent); }
+  .supbar .sroom { color: var(--ink); }
+  .supbar .cond { color: var(--warn); }
+  /* compact gauge mirroring the leader instrument cluster */
+  .mstat { display: inline-flex; align-items: center; gap: 5px; }
+  .mstat .mk { color: var(--faint); font-size: 9px; letter-spacing: .08em; }
+  .mbar { width: 44px; height: 7px; background: var(--screen); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .mbar i { display: block; height: 100%; border-radius: 4px; transition: width .3s; }
+  .mstat.hp .mbar i { background: linear-gradient(90deg, var(--accent-deep), var(--hp)); }
+  .mstat.mp .mbar i { background: linear-gradient(90deg, #1d4a72, var(--mp)); }
+  .mstat.mv .mbar i { background: linear-gradient(90deg, #6b5220, var(--mv)); }
+  .mbar.low i { background: var(--bad) !important; }
+  .mstat .mnum { color: var(--faint); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .mstat.hp .mnum b { color: var(--hp); } .mstat.mp .mnum b { color: var(--mp); } .mstat.mv .mnum b { color: var(--mv); }
+  .mstat.iron .mk { color: var(--iron); } .mstat.iron .mbar i { background: linear-gradient(90deg, #6b7180, var(--iron)); transition: width .1s linear; }
+  .mstat.iron .mnum b { color: var(--iron); }
+  .mstat.iron.ending .mbar i { animation: iron-blink .5s steps(1,end) infinite; }
+  .mstat.iron.ending .mk, .mstat.iron.ending .mnum b { color: var(--bad); }
+  .supbtn {
+    margin-left: auto; background: var(--line); color: var(--dim);
+    border: 1px solid var(--line2); border-radius: 5px; padding: 3px 11px;
+    font: inherit; font-size: 11px; cursor: pointer; transition: background .12s, border-color .12s;
+  }
+  .supbtn.quit { color: var(--bad); }         /* connected -> the action is to drop it */
+  .supbtn.quit:hover { border-color: #5a3230; background: rgba(238,111,98,.10); }
+  .sup .out { flex: 1; min-height: 0; }
+  .sup .inrow input { width: 100%; }
+</style>
+</head>
+<body>
+<div id="appbar">
+  <h1>gumiho</h1>
+  <span class="hint">좌: 리더 콘솔 · 우: 서포터 (다중, ＋로 추가)</span>
+  <span id="lanaddr" class="lanaddr" title="집안 다른 컴퓨터에서 이 주소로 접속 (클릭하여 복사)">LAN: …</span>
+</div>
+<div id="panes"></div>
+
+<!-- Character picker — offered automatically when no session is connected. -->
+<div id="charmodal">
+  <div class="box">
+    <h2>캐릭터 선택</h2>
+    <div class="sub">접속할 캐릭터를 고르세요 · 로스터는 .env 의 GUMIHO_CHAR&lt;n&gt;_NAME/_PASSWORD 로 추가</div>
+    <div class="row"><label>리더</label><select id="sel-leader"></select></div>
+    <div class="row"><label>서포터</label><select id="sel-supporter"></select></div>
+    <div class="warn" id="charmodal-warn"></div>
+    <div class="actions">
+      <button id="charmodal-close">닫기</button>
+      <button id="charmodal-go" class="primary">선택하고 접속</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Layout: LEFT = the leader's full cockpit (sid "a"). RIGHT = the supporters column —
+// one slim section per supporter (status bar + console), added dynamically; the server
+// says which sessions exist via {type:"sessions"}.
+const LEADER = "a";
+let SUPS = [];                                   // supporter sids with a named section
+let SESS = [];                                   // last {sid, role, name, status} list
+const allSids = () => [LEADER, ...SUPS];
+const LABELS = {a: "리더"};
+const el = (sid, name) => document.getElementById(`${sid}-${name}`);
+
+// LAN address in the header — the URL other computers in the house use to reach this UI.
+// Click to copy. Falls back to whatever host the page was opened from if /lan is missing.
+(function initLanAddr() {
+  const node = document.getElementById("lanaddr");
+  if (!node) return;
+  let url = `http://${location.host}`;
+  const show = () => { node.textContent = `LAN: ${url}`; };
+  fetch("/lan").then(r => r.json()).then(d => {
+    if (d && d.ip) url = `http://${d.ip}:${d.port}`;
+    show();
+  }).catch(show);
+  show();
+  node.addEventListener("click", () => {
+    const addr = url;
+    (navigator.clipboard ? navigator.clipboard.writeText(addr) : Promise.reject())
+      .then(() => { node.textContent = "복사됨 ✓"; setTimeout(show, 1200); })
+      .catch(() => {});
+  });
+})();
+
+function buildPane(sid) {
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  pane.innerHTML = `
+  <div class="phead">
+    <span class="who" id="${sid}-who">${LABELS[sid]}</span>
+    <span class="job" id="${sid}-job"></span>
+    <span class="status" id="${sid}-status">disconnected</span>
+    <span class="wfbadge" id="${sid}-wf"></span>
+    <span class="battle" id="${sid}-battle">⚔ 전투중</span>
+    <span class="vmini" id="${sid}-vmini"></span>
+    <span style="flex:1"></span>
+    <button id="${sid}-btn-engine" class="primary">엔진 OFF</button>
+    <button id="${sid}-btn-connect">접속</button>
+    <button id="${sid}-btn-quit">저장 종료</button>
+    <button id="${sid}-btn-disc" class="danger">강제 종료</button>
+  </div>
+  ${sid === "a" ? `<div class="tickmeter" id="${sid}-tickmeter" title="서버 마스터 틱 (~74.5s)"><i id="${sid}-tickfill"></i><span class="tl" id="${sid}-ticklabel">—</span></div>` : ""}
+  <div class="out" id="${sid}-out"></div>
+  <div class="zonemap" id="${sid}-zonemap">
+    <div class="zmhead"><span id="${sid}-zmtitle">존 지도 · 실시간</span><span class="zmhint">☑ = 사냥 제외</span></div>
+    <div class="zmwrap"><div class="zmgrid"></div></div>
+  </div>
+  <div class="inrow">
+    <input id="${sid}-cmd" placeholder="명령 입력… (Enter)" autocomplete="off">
+  </div>
+  <div class="side">
+    <div>
+      <div class="lbl">상태</div>
+      <div class="stats">
+        <div class="stat hp"><div class="stat-top"><span class="stat-k">HP</span><div class="stat-bar" id="${sid}-hpbox"><i id="${sid}-hpbar"></i></div></div><div class="stat-num"><b id="${sid}-hpv">—</b> <span id="${sid}-hpm"></span></div></div>
+        <div class="stat mp"><div class="stat-top"><span class="stat-k">MP</span><div class="stat-bar" id="${sid}-mpbox"><i id="${sid}-mpbar"></i></div></div><div class="stat-num"><b id="${sid}-mpv">—</b> <span id="${sid}-mpm"></span></div></div>
+        <div class="stat mv"><div class="stat-top"><span class="stat-k">MV</span><div class="stat-bar" id="${sid}-mvbox"><i id="${sid}-mvbar"></i></div></div><div class="stat-num"><b id="${sid}-mvv">—</b> <span id="${sid}-mvm"></span></div></div>
+        <div class="stat iron" id="${sid}-ironrow"><div class="stat-top"><span class="stat-k">철면</span><div class="stat-bar" id="${sid}-ironbox"><i id="${sid}-ironbar"></i></div></div><div class="stat-num"><b id="${sid}-ironv">—</b> <span>s</span></div></div>
+      </div>
+      <div class="meta" id="${sid}-meta"></div>
+    </div>
+    <div>
+      <div class="lbl">현재 위치</div>
+      <div class="room" id="${sid}-room">—</div>
+      <div class="zone" id="${sid}-zone"></div>
+      <div class="chips" id="${sid}-exits"></div>
+    </div>
+    <div>
+      <div class="lbl">사냥 시작 <span class="zone" style="font-weight:400">· 여러 곳 선택 = 순환</span></div>
+      <div class="huntrow">
+        <select id="${sid}-hunt-zone" class="labsel" multiple size="3"
+                title="사냥터 (고정 지도). Ctrl/⌘-클릭으로 여러 곳 선택 시 순환 사냥 — 한 곳을 다 쓸면 다음 곳으로 이동(그 사이 리젠)"></select>
+        <button id="${sid}-hunt-go" class="primary" title="선택한 사냥터(들)로 이동 후 사냥">사냥 ▶</button>
+      </div>
+      <div class="huntrow">
+        <select id="${sid}-hunt-route" class="labsel" title="경로 (중앙 광장에서 이동)"></select>
+        <button id="${sid}-route-go" title="선택한 경로대로 이동">이동 ▶</button>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">보이는 것</div>
+      <ul id="${sid}-entities"></ul>
+    </div>
+    <div>
+      <div class="lbl">소지품</div>
+      <ul id="${sid}-inv"></ul>
+    </div>
+    <div id="${sid}-shopwrap" style="display:none">
+      <div class="lbl">쇼핑 목록 <span class="shopnote">썩어 없어짐 · 재장착까지</span></div>
+      <ul id="${sid}-shop" class="shop"></ul>
+    </div>
+    <div>
+      <div class="lbl">대화</div>
+      <div class="comms" id="${sid}-comms"></div>
+    </div>
+    <details class="panel" id="${sid}-survey-panel">
+      <summary>존 측량 <span class="svnote" id="${sid}-survey-note"></span></summary>
+      <div class="body">
+        <div class="labrow" style="justify-content:flex-end">
+          <button id="${sid}-survey-reset" class="mini danger" title="측량한 지도 초기화 (새 존 시작 시)">초기화</button>
+        </div>
+        <div id="${sid}-survey"></div>
+      </div>
+    </details>
+    <details class="panel">
+      <summary>경로 기록 <span id="${sid}-rec-state" style="color:var(--bad);letter-spacing:0;text-transform:none"></span></summary>
+      <div class="body">
+        <div class="labrow">
+          <input id="${sid}-rec-name" placeholder="목적지 이름 (예: 한성의 하수구)" style="flex:1;min-width:0">
+        </div>
+        <div class="labrow">
+          <button id="${sid}-rec-start" title="현재 방(중앙 광장)에서 기록 시작">기록 시작</button>
+          <button id="${sid}-rec-save" style="color:var(--accent)" title="이름으로 저장">저장</button>
+          <button id="${sid}-rec-cancel" class="danger">취소</button>
+        </div>
+        <div class="subnote" id="${sid}-rec-log"></div>
+      </div>
+    </details>
+  </div>`;
+  return pane;
+}
+
+// One slim SUPPORTER section: a horizontal status bar (name · connection · level ·
+// exp-to-level · money) over its console. No sidebar, no control buttons.
+function buildSup(sid) {
+  const d = document.createElement("div");
+  d.className = "sup";
+  d.id = `${sid}-sup`;
+  const stat = (kind, k) => `
+    <span class="mstat ${kind}"><span class="mk">${k}</span>
+      <span class="mbar" id="${sid}-${kind}box"><i id="${sid}-${kind}bar"></i></span>
+      <span class="mnum"><b id="${sid}-${kind}v">—</b><span id="${sid}-${kind}m"></span></span></span>`;
+  d.innerHTML = `
+  <div class="supbar">
+    <span class="nm" id="${sid}-sname">—</span>
+    <span class="status" id="${sid}-sstatus">disconnected</span>
+    <span class="wfbadge" id="${sid}-swf"></span>
+    <label class="grpchk" title="그룹 포함 — 해제하면 XP 그룹에서 제외 ('이름 그룹' 토글)">
+      <input type="checkbox" id="${sid}-sgroup" checked><span>그룹</span></label>
+    <span class="battle" id="${sid}-sbattle">⚔</span>
+    <span class="msep"></span>
+    ${stat("hp", "HP")}${stat("mp", "MP")}${stat("mv", "MV")}
+    <span class="mstat iron" id="${sid}-ironrow" style="display:none"><span class="mk">철면</span>
+      <span class="mbar" id="${sid}-ironbox"><i id="${sid}-ironbar"></i></span>
+      <span class="mnum"><b id="${sid}-ironv">—</b>s</span></span>
+    <span class="msep"></span>
+    <span class="kv">Lv <b id="${sid}-slvl">—</b></span>
+    <span class="kv" title="레벨업까지 남은 경험치">XP <b id="${sid}-sxp">—</b></span>
+    <span class="kv">💰 <b id="${sid}-scash">—</b></span>
+    <span class="cond" id="${sid}-scond"></span>
+    <span class="msep"></span>
+    <span class="kv sroom" id="${sid}-sroom">—</span>
+    <button class="supbtn quit" id="${sid}-sconn" title="이 서포터 종료 (종료 시 섹션이 사라집니다)">종료</button>
+  </div>
+  <div class="out" id="${sid}-out"></div>
+  <div class="inrow"><input id="${sid}-cmd" placeholder="명령 입력… (Enter)" autocomplete="off"></div>`;
+  return d;
+}
+
+const panes = document.getElementById("panes");
+panes.appendChild(buildPane(LEADER));
+const supcol = document.createElement("div");
+supcol.id = "supcol";
+supcol.innerHTML = `
+  <div id="suphead">
+    <span class="t">서포터</span>
+    <span style="flex:1"></span>
+    <span id="supadd">
+      <select id="supadd-sel"></select>
+      <button id="supadd-go">추가</button>
+      <button id="supadd-cancel">취소</button>
+    </span>
+    <button id="supadd-open">＋ 서포터 추가</button>
+  </div>
+  <div id="suplist"><div class="empty">서포터 없음 — 캐릭터 선택 모달 또는 ＋ 서포터 추가 버튼으로 시작</div></div>`;
+panes.appendChild(supcol);
+
+// ---- supporters column: ephemeral sections + the add-supporter picker ----
+// A supporter section lives ONLY while its connection is open — a closed connection
+// removes it entirely (unlike the leader window, which persists). Re-add via the ＋ picker.
+function refreshEmpty() {
+  document.getElementById("suplist").querySelector(".empty").style.display = SUPS.length ? "none" : "";
+}
+function ensureSup(sid, name) {
+  if (!document.getElementById(`${sid}-sup`)) {
+    document.getElementById("suplist").appendChild(buildSup(sid));
+    wireInput(el(sid, "cmd"), line => sendCmd(sid, line));
+    el(sid, "sconn").onclick = () => send({type: "quit", sid});   // section vanishes on close
+    el(sid, "sgroup").onchange = () => send({type: "group_toggle", sid});   // XP-group in/out
+    if (!SUPS.includes(sid)) SUPS.push(sid);
+  }
+  if (name) el(sid, "sname").textContent = name;
+  refreshEmpty();
+}
+function removeSup(sid) {
+  const n = document.getElementById(`${sid}-sup`);
+  if (n) n.remove();
+  SUPS = SUPS.filter(x => x !== sid);
+  refreshEmpty();
+}
+function updateSessions(m) {
+  SESS = m.list || [];
+  for (const s of SESS)
+    if (s.role === "supporter") {
+      if (s.name && s.status !== "disconnected") ensureSup(s.sid, s.name);
+      else removeSup(s.sid);                                     // disconnected -> no section
+    }
+  fillSupAddSel();
+}
+
+function fillSupAddSel() {
+  const sel = document.getElementById("supadd-sel");
+  // Addable = a roster character that's neither the leader nor a currently-connected session
+  // (a disconnected character IS addable — that reconnects its session).
+  const used = new Set(SESS.filter(s => s.status !== "disconnected").map(s => s.name));
+  if (ROSTER.leader) used.add(ROSTER.leader);
+  const free = ROSTER.names.filter(n => !used.has(n));
+  sel.replaceChildren();
+  for (const n of free) {
+    const o = document.createElement("option");
+    o.value = o.textContent = n;
+    sel.appendChild(o);
+  }
+  document.getElementById("supadd-open").disabled = free.length === 0;
+}
+
+{
+  const row = document.getElementById("supadd");
+  const open = document.getElementById("supadd-open");
+  open.onclick = () => { fillSupAddSel(); row.classList.add("on"); open.style.display = "none"; };
+  const close = () => { row.classList.remove("on"); open.style.display = ""; };
+  document.getElementById("supadd-cancel").onclick = close;
+  document.getElementById("supadd-go").onclick = () => {
+    const n = document.getElementById("supadd-sel").value;
+    if (n) send({type: "add_supporter", name: n});
+    close();
+  };
+}
+
+// ---- websocket (single, sid-tagged both ways) ----
+let ws, lastMsgAt = Date.now();
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => {
+    lastMsgAt = Date.now();
+    const m = JSON.parse(e.data);
+    if (m.type === "roster") { updateRoster(m); return; }
+    if (m.type === "sessions") { updateSessions(m); return; }
+    for (const sid of (m.sid ? [m.sid] : allSids())) handle(sid, m);
+  };
+  ws.onopen = () => { lastMsgAt = Date.now(); send({type: "engine_list"}); };
+  ws.onclose = () => setTimeout(connectWS, 1500);
+}
+connectWS();
+// Watchdog: the server pings every 30s, so a long silence means the socket died
+// without a close event (tab freeze, server restart). Force-cycle it.
+setInterval(() => {
+  if (Date.now() - lastMsgAt > 50000) {
+    lastMsgAt = Date.now();
+    try { ws.close(); } catch (e) { connectWS(); }
+  }
+}, 10000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && ws.readyState !== 1) { try { ws.close(); } catch (e) {} connectWS(); }
+});
+const send = obj => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
+const sendCmd = (sid, line) => send({type: "command", sid, line});
+
+// ---- character picker (leader / supporter) ----
+// The server sends {type:"roster", names, leader, supporter} on connect and after every
+// assignment. When NO session is connected, the modal is offered so the duo can be
+// (re)composed without editing .env; it hides itself the moment anything connects.
+const ROSTER = { names: [], leader: null, supporter: null };
+const STATUS = {};                            // last seen status per sid
+let charModalDismissed = false;               // 닫기 pressed — don't re-offer until reconnected
+const charModal = document.getElementById("charmodal");
+const selLeader = document.getElementById("sel-leader");
+const selSupporter = document.getElementById("sel-supporter");
+
+function fillCharSelect(sel, preferred) {
+  const keep = sel.value;
+  sel.replaceChildren();
+  for (const n of ROSTER.names) {
+    const o = document.createElement("option");
+    o.value = o.textContent = n;
+    sel.appendChild(o);
+  }
+  sel.value = ROSTER.names.includes(keep) ? keep
+            : (ROSTER.names.includes(preferred) ? preferred : (ROSTER.names[0] || ""));
+}
+
+function updateRoster(m) {
+  ROSTER.names = m.names || [];
+  ROSTER.leader = m.leader; ROSTER.supporter = m.supporter;
+  fillCharSelect(selLeader, ROSTER.leader);
+  fillCharSelect(selSupporter, ROSTER.supporter);
+  charModalValidate();
+  maybeOfferCharModal();
+  fillSupAddSel();
+}
+
+function charModalValidate() {
+  const warn = document.getElementById("charmodal-warn");
+  const go = document.getElementById("charmodal-go");
+  if (ROSTER.names.length < 2) {
+    warn.textContent = "로스터에 캐릭터가 2명 이상 필요합니다 (.env 에 추가하세요)";
+    go.disabled = true;
+  } else if (selLeader.value === selSupporter.value) {
+    warn.textContent = "리더와 서포터는 서로 다른 캐릭터여야 합니다";
+    go.disabled = true;
+  } else { warn.textContent = ""; go.disabled = false; }
+}
+selLeader.onchange = selSupporter.onchange = charModalValidate;
+
+function allDisconnected() {
+  return allSids().every(sid => STATUS[sid] === "disconnected");
+}
+function maybeOfferCharModal() {
+  if (allDisconnected() && !charModalDismissed && ROSTER.names.length > 0)
+    charModal.classList.add("on");
+  else if (!allDisconnected())
+    charModal.classList.remove("on");
+}
+document.getElementById("charmodal-close").onclick = () => {
+  charModalDismissed = true;                  // re-offered after the next connect/disconnect cycle
+  charModal.classList.remove("on");
+};
+document.getElementById("charmodal-go").onclick = () => {
+  send({type: "assign", leader: selLeader.value, supporter: selSupporter.value, connect: true});
+  charModal.classList.remove("on");           // statuses flip to connecting; re-offers on failure
+};
+
+// ---- rendering ----
+function atBottom(out) { return out.scrollHeight - out.scrollTop - out.clientHeight < 60; }
+
+// Translucent overlay of the TEMPORARY in-zone map (learned live from 지도 as the
+// hunt sweeps): room boxes plus the KNOWN PATHS (edges) between them. Checkboxes set
+// runtime-only "don't hunt here" flags per room. (Future: scroll arrows on the edges
+// for very large zones, and per-room/edge editing so a human can correct the map.)
+const ZM_SIZE = 30, ZM_GAP = 14, ZM_CELL = ZM_SIZE + ZM_GAP;   // room box + path gap
+function renderZonemap(sid, grid) {
+  const box = document.getElementById(sid + "-zonemap");
+  if (!box) return;
+  // The survey overlay and this 지도 gridsweep overlay share one box. In a survey-nav
+  // zone the survey OWNS it (box._survey) — yield entirely so a (often empty) gridmap
+  // message doesn't wipe the survey map. The survey releases ownership by rendering a
+  // nav=false snapshot when the zone stops being survey-nav.
+  if (box._survey) return;
+  const gridEl = box.querySelector(".zmgrid");
+  if (!grid || !grid.cells || !grid.cells.length) {
+    box.classList.remove("on"); gridEl.innerHTML = ""; return;
+  }
+  box.classList.add("on");
+  const tt = document.getElementById(sid + "-zmtitle");
+  if (tt) tt.textContent = "존 지도 · 실시간";       // the live 지도 gridsweep owns the box here
+  const rs = grid.cells.map(c => c.rc[0]), cs = grid.cells.map(c => c.rc[1]);
+  const minR = Math.min(...rs), minC = Math.min(...cs);
+  const maxR = Math.max(...rs), maxC = Math.max(...cs);
+  gridEl.style.width = ((maxC - minC) * ZM_CELL + ZM_SIZE) + "px";
+  gridEl.style.height = ((maxR - minR) * ZM_CELL + ZM_SIZE) + "px";
+  gridEl.innerHTML = "";
+  const top = r => (r - minR) * ZM_CELL, left = c => (c - minC) * ZM_CELL;
+
+  // 1) known paths (edges), drawn first so the room boxes sit on top of them.
+  for (const [a, b] of (grid.edges || [])) {
+    const [r1, c1] = a, [r2, c2] = b;
+    const e = document.createElement("div");
+    e.className = "zmedge";
+    if (r1 === r2) {                              // horizontal link
+      e.style.top = (top(r1) + ZM_SIZE / 2 - 1.5) + "px";
+      e.style.left = (left(Math.min(c1, c2)) + ZM_SIZE) + "px";
+      e.style.width = ZM_GAP + "px"; e.style.height = "3px";
+    } else {                                      // vertical link
+      e.style.left = (left(c1) + ZM_SIZE / 2 - 1.5) + "px";
+      e.style.top = (top(Math.min(r1, r2)) + ZM_SIZE) + "px";
+      e.style.height = ZM_GAP + "px"; e.style.width = "3px";
+    }
+    gridEl.appendChild(e);
+  }
+
+  // 2) the room boxes.
+  const [hr, hc] = grid.here || [null, null];
+  for (const c of grid.cells) {
+    const [r, co] = c.rc;
+    const d = document.createElement("div");
+    d.className = "zmcell" + (c.visited ? " visited" : "") + (c.avoid ? " avoid" : "")
+      + (r === hr && co === hc ? " here" : "");
+    d.style.top = top(r) + "px";
+    d.style.left = left(co) + "px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = c.avoid; cb.title = "이 방에서 사냥 안 함";
+    cb.onchange = () => send({ type: "grid_avoid", sid, cell: [r, co], avoid: cb.checked });
+    d.appendChild(cb);
+    gridEl.appendChild(d);
+  }
+}
+
+// ANSI SGR → colored spans (16-color palette tuned to the dark theme).
+const ANSI_FG = {
+  30: "#6b7d75", 31: "#e06c60", 32: "#52c79a", 33: "#e0b458",
+  34: "#6fa8dc", 35: "#c48ce0", 36: "#5fc4c4", 37: "#cfe3d8",
+  90: "#55655e", 91: "#f0938a", 92: "#7fe0b8", 93: "#f0cc80",
+  94: "#93c1f0", 95: "#dcaef5", 96: "#8adcdc", 97: "#ffffff",
+};
+function ansiFrag(text) {
+  const frag = document.createDocumentFragment();
+  const parts = text.split(/\x1b\[([0-9;]*)m/);
+  let fg = null, bold = false;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) {
+      for (const code of (parts[i] || "0").split(";").map(Number)) {
+        if (code === 0) { fg = null; bold = false; }
+        else if (code === 1) bold = true;
+        else if (code === 22) bold = false;
+        else if (code === 39) fg = null;
+        else if (ANSI_FG[code]) fg = code;
+      }
+      continue;
+    }
+    const chunk = parts[i].replace(/\x1b\[[0-9;?]*[A-LN-Za-ln-z]/g, "");
+    if (!chunk) continue;
+    const span = document.createElement("span");
+    let color = fg;
+    if (bold && color !== null && color < 90) color += 60;
+    if (color !== null) span.style.color = ANSI_FG[color];
+    if (bold) span.style.fontWeight = "600";
+    span.textContent = chunk;
+    frag.appendChild(span);
+  }
+  return frag;
+}
+
+function append(sid, text, cls) {
+  const out = el(sid, "out");
+  if (!out) return;                 // a supporter's stream before its section is built
+  const stick = atBottom(out);
+  const span = document.createElement("span");
+  if (cls) { span.className = cls; span.textContent = text; }
+  else span.appendChild(ansiFrag(text));
+  out.appendChild(span);
+  // Cap scrollback: each message wraps several ANSI spans, and append reads layout
+  // (atBottom) + writes scrollTop every time, so the per-message reflow cost grows
+  // with the tree. A smaller cap keeps a long session as snappy as a fresh page.
+  while (out.childNodes.length > 1200) out.removeChild(out.firstChild);
+  if (stick) out.scrollTop = out.scrollHeight;
+}
+function bar(barEl, boxEl, cur, max) {
+  if (max) {
+    const pct = Math.max(0, Math.min(100, 100 * cur / max));
+    barEl.style.width = pct + "%";
+    boxEl.classList.toggle("low", pct < 30);
+  } else { barEl.style.width = cur > 0 ? "100%" : "0%"; boxEl.classList.remove("low"); }
+}
+// --- 철면 (iron-skin) countdown bar. The server sends `ironskin_remaining` seconds on each state
+// broadcast; we animate smoothly at 0.1s between broadcasts and re-sync on each one. Full at cast,
+// depletes to the left, blinks red in the last 3s, hidden entirely when not in 철면.
+const ironState = {};   // sid -> { dur, rem0, t0 }
+function ironSync(sid, remaining, dur) {
+  if (remaining > 0) ironState[sid] = { dur: dur || 43, rem0: remaining, t0: performance.now() };
+  else delete ironState[sid];
+  renderIron(sid);
+}
+function renderIron(sid) {
+  const row = el(sid, "ironrow"); if (!row) return;
+  const st = ironState[sid];
+  if (!st) { row.style.display = "none"; row.classList.remove("ending"); return; }
+  const rem = st.rem0 - (performance.now() - st.t0) / 1000;
+  if (rem <= 0) { delete ironState[sid]; row.style.display = "none"; row.classList.remove("ending"); return; }
+  row.style.display = "flex";   // override the CSS `.stat.iron{display:none}` (""=revert to none)
+  el(sid, "ironbar").style.width = Math.max(0, Math.min(100, 100 * rem / st.dur)) + "%";
+  el(sid, "ironv").textContent = rem.toFixed(1);
+  row.classList.toggle("ending", rem <= 3);   // last 3s -> blink red
+}
+setInterval(() => { for (const sid in ironState) renderIron(sid); }, 100);
+
+// --- master ~74.5s tick meter (thin bar under the pane header). Sweeps 0->100% over each tick and
+// cycles locally between the (irregular) broadcasts; shows a striped "syncing" state until the
+// server has learned the phase (it can't be known at connect time — only after buff-fade boundaries).
+const tickState = {};   // sid -> { on, synced, period, rem0, t0 }
+function tickSync(sid, online, synced, period, rem) {
+  tickState[sid] = { on: !!online, synced: !!synced, period: period || 74.5,
+                     rem0: (rem == null ? null : rem), t0: performance.now() };
+  renderTick(sid);
+}
+function renderTick(sid) {
+  const box = el(sid, "tickmeter"); if (!box) return;
+  const st = tickState[sid];
+  if (!st || !st.on) { box.style.display = "none"; return; }
+  box.style.display = "block";
+  const fill = el(sid, "tickfill"), lab = el(sid, "ticklabel");
+  if (!st.synced || st.rem0 == null) {          // phase not learned yet
+    box.classList.add("syncing"); fill.style.width = "100%"; lab.textContent = "TICK 동기화 중…";
+    return;
+  }
+  box.classList.remove("syncing");
+  let rem = st.rem0 - (performance.now() - st.t0) / 1000;
+  const P = st.period;
+  while (rem <= 0) rem += P;                     // keep sweeping between broadcasts
+  fill.style.width = (100 * (1 - rem / P)).toFixed(1) + "%";
+  lab.textContent = `TICK ▸ ${rem.toFixed(0)}s / ${P.toFixed(1)}s`;
+}
+setInterval(() => { for (const sid in tickState) renderTick(sid); }, 100);
+function fillChips(sid, items, onclick) {
+  const box = el(sid, "exits");
+  box.replaceChildren();
+  for (const it of items || []) {
+    const b = document.createElement("button");
+    b.textContent = it;
+    b.onclick = () => onclick(it);
+    box.appendChild(b);
+  }
+}
+function fillList(ul, items) {
+  ul.replaceChildren();
+  for (const it of items || []) {
+    const li = document.createElement("li");
+    li.textContent = it;
+    ul.appendChild(li);
+  }
+}
+// The reconstructed zone graph: each frame is a non-overlapping plane; the wormhole
+// structures render as separate frames joined by labelled portals (the two matrices).
+function drawSurveyFrames(wrap, data) {
+  wrap.replaceChildren();
+  const SX = 26, SY = 20, CW = 20, CH = 15;
+  for (const fr of (data && data.frames) || []) {
+    const cells = fr.cells || [];
+    if (!cells.length) continue;
+    const box = document.createElement("div");
+    box.className = "svframe";
+    let minR = Infinity, minC = Infinity, maxR = -Infinity, maxC = -Infinity;
+    for (const c of cells) { minR = Math.min(minR, c.r); minC = Math.min(minC, c.c); maxR = Math.max(maxR, c.r); maxC = Math.max(maxC, c.c); }
+    box.style.height = ((maxR - minR) * SY + CH + 4) + "px";
+    const pos = {};
+    for (const c of cells) pos[c.rid] = [c.r - minR, c.c - minC];
+    for (const [a, b] of (fr.edges || [])) {
+      const [ra, ca] = pos[a], [rb, cb] = pos[b];
+      const e = document.createElement("div");
+      e.className = "svedge";
+      if (ra === rb) { e.style.left = (Math.min(ca, cb) * SX + CW) + "px"; e.style.top = (ra * SY + CH / 2) + "px"; e.style.width = (SX - CW) + "px"; e.style.height = "2px"; }
+      else { e.style.top = (Math.min(ra, rb) * SY + CH) + "px"; e.style.left = (ca * SX + CW / 2) + "px"; e.style.height = (SY - CH) + "px"; e.style.width = "2px"; }
+      box.appendChild(e);
+    }
+    for (const c of cells) {
+      const [r, co] = pos[c.rid];
+      const d = document.createElement("div");
+      d.className = "svcell" + (c.cur ? " cur" : (c.swept ? " swept" : ""));
+      d.style.left = (co * SX) + "px"; d.style.top = (r * SY) + "px";
+      d.textContent = c.rid; d.title = `#${c.rid}` + (c.zone ? ` · ${c.zone}` : "") + (c.swept ? " · 확인됨" : "");
+      box.appendChild(d);
+    }
+    wrap.appendChild(box);
+  }
+  for (const p of (data && data.portals) || []) {
+    const d = document.createElement("div");
+    d.className = "svportal";
+    d.textContent = `↪ 포탈  #${p.a} —${p.dir}→ #${p.b}`;
+    wrap.appendChild(d);
+  }
+}
+function renderSurvey(sid, data) {
+  const wrap = el(sid, "survey");                 // the 존 측량 panel (its own detailed view)
+  if (wrap) drawSurveyFrames(wrap, data);
+  el(sid, "survey-note").textContent = data && data.rooms ? `${data.rooms}칸` : "";
+  renderSurveyOverlay(sid, data);                 // feed the floating zone overlay too
+}
+// The floating zone overlay for a SURVEY-nav zone: SAME look as the 지도 gridsweep overlay
+// (.zmcell boxes + edges + the `here` marker), just fed by the survey graph, with the room
+// NUMBER shown in each cell. Only claims the overlay when the survey is the active nav
+// mechanism (data.nav) — on a gridsweep zone the gridmap owns it. The survey graph
+// accumulates EVERY zone the character has walked (travel path, town, resupply), so we show
+// ONLY the zone it is currently in — filtered by the current (cur) room's zone name — else
+// unrelated zones sprawl across the overlay. Remaining frames laid left-to-right.
+function renderSurveyOverlay(sid, data) {
+  const box = document.getElementById(sid + "-zonemap");
+  if (!box) return;
+  const grid = box.querySelector(".zmgrid");
+  const allFrames = (data && data.frames) || [];
+  // Show ONLY the matrix/plane the character is standing in, NAMED. A fixed hunting map is
+  // several planar MATRICES joined by portals into ONE connected graph, so a connectivity
+  // filter can't separate them — laying all matrices side by side made it impossible to see
+  // whether the bot is on-route. Each snapshot already emits one FRAME per matrix (per
+  // disconnected area, for a ZoneSurvey), so we pick the single frame that contains the
+  // current room and render just that. (Within it we still intersect the connectivity
+  // component so a ZoneSurvey frame holding two separately-walked blobs shows only the
+  // current one.) Fixed-map cells carry the matrix name in .zone for the header.
+  const adj = {};
+  const link = (a, b) => { (adj[a] = adj[a] || []).push(b); (adj[b] = adj[b] || []).push(a); };
+  let curRid = null;
+  for (const fr of allFrames) {
+    for (const [a, b] of (fr.edges || [])) link(a, b);
+    for (const c of (fr.cells || [])) if (c.cur) curRid = c.rid;
+  }
+  for (const p of (data && data.portals) || []) link(p.a, p.b);
+  // Remember the last cur so a momentary null between renders doesn't blink the map off.
+  if (curRid == null) curRid = (box._svCur == null ? null : box._svCur); else box._svCur = curRid;
+  // The single frame (matrix / plane) that contains the current room.
+  const curFrame = curRid == null ? null
+    : allFrames.find(fr => (fr.cells || []).some(c => c.rid === curRid));
+  // Connectivity component containing cur (edges + portals) — trims a multi-blob survey frame;
+  // for a fixed map every room is in one component, so this leaves the whole matrix intact.
+  const comp = new Set();
+  if (curRid != null) {
+    const q = [curRid]; comp.add(curRid);
+    while (q.length) { const x = q.pop(); for (const y of (adj[x] || [])) if (!comp.has(y)) { comp.add(y); q.push(y); } }
+  }
+  const inComp = rid => comp.size ? comp.has(rid) : true;
+  const frames = curFrame ? [{
+    cells: (curFrame.cells || []).filter(c => inComp(c.rid)),
+    edges: (curFrame.edges || []).filter(([a, b]) => inComp(a) && inComp(b)),
+  }].filter(fr => fr.cells.length) : [];
+  const has = !!(data && data.nav && frames.some(f => f.cells.length));
+  const titleEl = document.getElementById(sid + "-zmtitle");
+  if (!has) {
+    if (box._survey) { box.classList.remove("on"); grid.replaceChildren(); box._survey = false; if (titleEl) titleEl.textContent = "존 지도 · 실시간"; }
+    return;
+  }
+  // Header: name the matrix being shown (fixed-map cells carry it in .zone) + how much of
+  // THIS matrix is swept, so you can see progress within the current plane at a glance.
+  const shown = frames[0].cells;
+  const mname = (shown.find(c => c.zone) || {}).zone || null;
+  const sweptN = shown.filter(c => c.swept).length;
+  if (titleEl) titleEl.textContent = (mname ? ("존 지도 · " + mname) : "존 지도 · 현재 구역")
+    + `  (${sweptN}/${shown.length}칸)`;
+  box.classList.add("on"); box._survey = true;
+  grid.replaceChildren();
+  const top = r => r * ZM_CELL, left = c => c * ZM_CELL;
+  let colOff = 0, maxR = 0, maxCol = 0;
+  for (const fr of frames) {
+    const cells = fr.cells || [];
+    if (!cells.length) continue;
+    let mnR = Infinity, mnC = Infinity;
+    for (const c of cells) { mnR = Math.min(mnR, c.r); mnC = Math.min(mnC, c.c); }
+    const pos = {};
+    for (const c of cells) pos[c.rid] = [c.r - mnR, (c.c - mnC) + colOff];
+    for (const [a, b] of (fr.edges || [])) {
+      if (!(a in pos) || !(b in pos)) continue;
+      const [r1, c1] = pos[a], [r2, c2] = pos[b];
+      const e = document.createElement("div"); e.className = "zmedge";
+      if (r1 === r2) { e.style.top = (top(r1) + ZM_SIZE / 2 - 1.5) + "px"; e.style.left = (left(Math.min(c1, c2)) + ZM_SIZE) + "px"; e.style.width = ZM_GAP + "px"; e.style.height = "3px"; }
+      else { e.style.left = (left(c1) + ZM_SIZE / 2 - 1.5) + "px"; e.style.top = (top(Math.min(r1, r2)) + ZM_SIZE) + "px"; e.style.height = ZM_GAP + "px"; e.style.width = "3px"; }
+      grid.appendChild(e);
+    }
+    for (const c of cells) {
+      const [r, co] = pos[c.rid];
+      const d = document.createElement("div");
+      d.className = "zmcell svnum" + (c.swept ? " visited" : "") + (c.cur ? " here" : "");
+      d.style.top = top(r) + "px"; d.style.left = left(co) + "px";
+      d.textContent = c.rid;
+      d.title = `#${c.rid}` + (c.zone ? ` · ${c.zone}` : "") + (c.swept ? " · 확인됨" : "");
+      grid.appendChild(d);
+      maxR = Math.max(maxR, r); maxCol = Math.max(maxCol, co);
+    }
+    colOff = maxCol + 2;                            // next frame one gap column to the right
+  }
+  grid.style.width = (maxCol * ZM_CELL + ZM_SIZE) + "px";
+  grid.style.height = (maxR * ZM_CELL + ZM_SIZE) + "px";
+}
+function renderShopping(sid, items) {
+  const ul = el(sid, "shop");
+  ul.replaceChildren();
+  for (const it of items || []) {
+    const li = document.createElement("li");
+    li.appendChild(document.createTextNode(it));
+    const b = document.createElement("button");
+    b.className = "mini shopdel";
+    b.textContent = "✕";
+    b.title = "목록에서 제거";
+    b.onclick = () => send({type: "shop_remove", sid, item: it});
+    li.appendChild(b);
+    ul.appendChild(li);
+  }
+}
+function renderEntities(sid, list) {
+  const ul = el(sid, "entities");
+  ul.replaceChildren();
+  for (const it of list || []) {
+    const li = document.createElement("li");
+    const text = typeof it === "string" ? it : it.text;
+    const kw = typeof it === "string" ? null : it.kw;
+    const kind = typeof it === "string" ? "mob" : (it.kind ?? "mob");
+    li.appendChild(document.createTextNode(text));
+    const btn = (label, cmd, cls) => {
+      const b = document.createElement("button");
+      b.className = "mini" + (cls ? " " + cls : "");
+      b.textContent = label;
+      b.onclick = () => sendCmd(sid, cmd);
+      li.appendChild(b);
+    };
+    if (kw && kind === "mob") { btn("고려", `${kw} 고려`); btn("공격", `${kw} 공격`, "atk"); }
+    else if (kind === "player") {
+      const tag = document.createElement("span");
+      tag.textContent = " 👥 아군";
+      tag.style.cssText = "font-size:10.5px;color:var(--accent);margin-left:3px";
+      li.appendChild(tag);
+    } else if (kw && kind === "item") btn("가져", `${kw} 가져`);
+    else if (kw && kind === "readable") btn("봐", `${kw} 봐`);
+    ul.appendChild(li);
+  }
+}
+
+// ---- Behavior Lab ----
+let LAB = {actions: [], guards: [], workflows: {}, destinations: []};
+let engineOn = false;
+// Two leader-pane dropdowns: hunting ZONES (fixed maps) and ROUTES (from 중앙 광장).
+function fillHunt() {
+  fillDropdown(el(LEADER, "hunt-zone"), LAB.zones || [], "(사냥터 선택)");
+  fillDropdown(el(LEADER, "hunt-route"), LAB.destinations || [], "(경로 선택)");
+}
+
+function fillDropdown(sel, items, placeholder) {
+  if (!sel) return;
+  const keep = sel.value;
+  sel.replaceChildren();
+  const def = document.createElement("option");
+  def.value = ""; def.textContent = placeholder;
+  sel.appendChild(def);
+  for (const d of items) {
+    const o = document.createElement("option");
+    o.value = d; o.textContent = d;
+    sel.appendChild(o);
+  }
+  sel.value = keep;
+}
+
+function setEngineButtons(on) {
+  engineOn = on;
+  const b = el(LEADER, "btn-engine");     // one global engine toggle, on the leader pane
+  b.textContent = on ? "엔진 ON" : "엔진 OFF";
+  b.classList.toggle("on", on);
+}
+
+// A server restart serves new page code — reload once the socket reaches a new generation.
+function staleReload(m) {
+  if (!m.server_ver) return false;
+  if (!window._serverVer) { window._serverVer = m.server_ver; return false; }
+  if (window._serverVer !== m.server_ver) { location.reload(); return true; }
+  return false;
+}
+
+// Supporter section: a horizontal status bar — connection · workflow · battle · HP/MP/MV
+// (+철면) mini graphic bars · Lv/XP/money · conditions · room — over its console. No sidebar.
+function updateSupState(sid, m) {
+  if (staleReload(m)) return;
+  STATUS[sid] = m.status;
+  if (m.status !== "disconnected") charModalDismissed = false;
+  if (m.status === "disconnected") { removeSup(sid); maybeOfferCharModal(); return; }  // closed -> gone
+  maybeOfferCharModal();
+  ensureSup(sid, m.name);                               // appears on connect, rebuilt if missing
+  const online = m.status === "online";
+  if (m.name) el(sid, "sname").textContent = m.name;
+  const st = el(sid, "sstatus");
+  st.textContent = m.status;
+  st.className = "status " + m.status;
+  const wf = el(sid, "swf");
+  if (m.engine && m.workflow) { wf.textContent = m.workflow; wf.classList.add("on"); }
+  else wf.classList.remove("on");
+  el(sid, "sbattle").classList.toggle("on", !!m.in_battle);
+  // HP/MP/MV mini graphic bars (same bar() helper as the leader) + numbers
+  bar(el(sid, "hpbar"), el(sid, "hpbox"), m.hp, m.hp_max);
+  bar(el(sid, "mpbar"), el(sid, "mpbox"), m.mp, m.mp_max);
+  bar(el(sid, "mvbar"), el(sid, "mvbox"), m.mv, m.mv_max);
+  for (const k of ["hp", "mp", "mv"]) {
+    el(sid, k + "v").textContent = online ? (m[k] ?? "—") : "—";
+    el(sid, k + "m").textContent = m[k + "_max"] ? "/" + m[k + "_max"] : "";
+  }
+  ironSync(sid, m.ironskin_remaining || 0, m.ironskin_dur);
+  el(sid, "slvl").textContent = m.level ?? "—";
+  el(sid, "sxp").textContent = m.exp_remaining != null ? m.exp_remaining.toLocaleString() : "—";
+  el(sid, "scash").textContent = m.coins != null ? m.coins.toLocaleString() : "—";
+  const cond = el(sid, "scond");
+  cond.textContent = [m.hungry ? "🍖 배고픔" : "", m.thirsty ? "💧 갈증" : ""].filter(Boolean).join(" ");
+  el(sid, "sroom").textContent = online && m.room ? (m.zone ? `${m.room} · ${m.zone}` : m.room) : "—";
+  if (m.in_group != null) el(sid, "sgroup").checked = m.in_group;   // XP-group inclusion
+}
+
+function handle(sid, m) {
+  if (m.type === "error") maybeOfferCharModal();          // a failed assign leaves all disconnected
+  if (sid !== LEADER) {                                   // supporters: bar + console only
+    if (m.type === "state") { updateSupState(sid, m); return; }
+    if (m.type === "text") append(sid, m.data);
+    else if (m.type === "sent") append(sid, "» " + m.data + "\n", "sent");
+    else if (m.type === "info") append(sid, "· " + m.data + "\n", "info");
+    else if (m.type === "error") append(sid, "! " + m.data + "\n", "error");
+    return;
+  }
+  if (m.type === "record") {
+    const st = el(sid, "rec-state"), log = el(sid, "rec-log");
+    if (m.recording) {
+      st.textContent = `● 기록중 (시작: ${m.start || "?"})`;
+      log.textContent = (m.commands && m.commands.length) ? m.commands.join(" · ") : "(아직 없음)";
+    } else { st.textContent = ""; log.textContent = ""; }
+    return;
+  }
+  if (m.type === "engine_list") { LAB = m; fillHunt(); return; }
+  if (m.type === "probe") {
+    append(sid, (m.ok ? "🧪 " : "🧪✗ ") + m.text + "\n", m.ok ? "info" : "error");
+    return;
+  }
+  if (m.type === "gridmap") { renderZonemap(sid, m.grid); return; }
+  if (m.type === "survey") { renderSurvey(sid, m); return; }
+  if (m.type === "engine") return;   // status ping; the button state comes from `state`
+  if (m.type === "text") append(sid, m.data);
+  else if (m.type === "sent") append(sid, "» " + m.data + "\n", "sent");
+  else if (m.type === "info") append(sid, "· " + m.data + "\n", "info");
+  else if (m.type === "error") append(sid, "! " + m.data + "\n", "error");
+  else if (m.type === "comm") {
+    const box = el(sid, "comms");
+    const d = document.createElement("div");
+    d.innerHTML = `<span class="k">[${m.kind}]</span> <b></b> `;
+    d.querySelector("b").textContent = m.who;
+    d.appendChild(document.createTextNode(m.text));
+    box.prepend(d);
+    while (box.childNodes.length > 30) box.removeChild(box.lastChild);
+  }
+  else if (m.type === "state") {
+    if (staleReload(m)) return;
+    if (m.name) el(sid, "who").textContent = `${LABELS[sid]} · ${m.name}`;
+    const job = el(sid, "job");
+    if (m.job) { job.textContent = m.job; job.classList.add("on"); } else job.classList.remove("on");
+    const st = el(sid, "status");
+    st.textContent = m.status;
+    st.className = "status " + m.status;
+    // Character picker: offer the modal only while NOTHING is connected; a session
+    // coming alive re-arms the offer for the next fully-disconnected moment.
+    STATUS[sid] = m.status;
+    if (m.status !== "disconnected") charModalDismissed = false;
+    maybeOfferCharModal();
+    const wf = el(sid, "wf");
+    if (m.engine && m.workflow) { wf.textContent = m.workflow; wf.classList.add("on"); }
+    else wf.classList.remove("on");
+    // The zone-map overlay. Two owners share the box:
+    //  - the 지도 gridsweep map (box._survey falsy) reflects the LIVE sweep — only
+    //    hunting/wait use it, so any other workflow (or engine off) hides it, else the
+    //    last-drawn map lingers after the hunt stops (gridmap messages never clear it).
+    //  - the PERSISTENT survey map (box._survey) accumulates the zone graph and must
+    //    stay visible across rest/resupply/travel WITHIN a hunt; only drop it when the
+    //    engine is off (no navigation happening at all). Its own renderSurveyOverlay
+    //    clears it when the zone stops being survey-nav.
+    {
+      const zb = document.getElementById(sid + "-zonemap");
+      if (zb) {
+        const clear = () => { zb.classList.remove("on"); const zg = zb.querySelector(".zmgrid"); if (zg) zg.replaceChildren(); };
+        if (zb._survey) { if (!m.engine) { clear(); zb._survey = false; } }
+        else if (!(m.engine && (m.workflow === "hunting" || m.workflow === "wait"))) clear();
+      }
+    }
+    bar(el(sid, "hpbar"), el(sid, "hpbox"), m.hp, m.hp_max);
+    bar(el(sid, "mpbar"), el(sid, "mpbox"), m.mp, m.mp_max);
+    bar(el(sid, "mvbar"), el(sid, "mvbox"), m.mv, m.mv_max);
+    el(sid, "hpv").textContent = m.hp ?? "—"; el(sid, "hpm").textContent = m.hp_max ? "/ " + m.hp_max : "";
+    el(sid, "mpv").textContent = m.mp ?? "—"; el(sid, "mpm").textContent = m.mp_max ? "/ " + m.mp_max : "";
+    el(sid, "mvv").textContent = m.mv ?? "—"; el(sid, "mvm").textContent = m.mv_max ? "/ " + m.mv_max : "";
+    ironSync(sid, m.ironskin_remaining || 0, m.ironskin_dur);
+    tickSync(sid, m.status === "online", m.tick_synced, m.tick_period, m.tick_remaining);
+    const meta = el(sid, "meta");
+    meta.replaceChildren();
+    const addMeta = (cls, txt) => {
+      const s = document.createElement("span"); s.className = cls; s.textContent = txt; meta.appendChild(s);
+    };
+    if (m.level) addMeta("lvl", `Lv.${m.level}`);
+    if (m.exp_remaining != null) addMeta("xp", `레벨업까지 ${m.exp_remaining.toLocaleString()} XP`);
+    if (m.coins != null) addMeta("cash", `💰 ${m.coins.toLocaleString()}`);
+    if (m.hungry) addMeta("cond", "🍖 배고픔");
+    if (m.thirsty) addMeta("cond", "💧 갈증");
+    el(sid, "vmini").textContent = m.status === "online" ? `${m.hp}:${m.mp}:${m.mv}` : "";
+    el(sid, "room").textContent = m.room ?? "—";
+    el(sid, "zone").textContent = m.zone ? `존: ${m.zone}` : "";
+    fillChips(sid, m.exits, dir => sendCmd(sid, dir));
+    renderEntities(sid, m.entities);
+    fillList(el(sid, "inv"), m.inventory);
+    // Shopping list: perishables that rotted away, kept until re-equipped (장비).
+    const shopWrap = document.getElementById(sid + "-shopwrap");
+    if (shopWrap) {
+      const shop = m.shopping || [];
+      renderShopping(sid, shop);
+      shopWrap.style.display = shop.length ? "" : "none";
+    }
+    el(sid, "battle").style.display = m.in_battle ? "" : "none";
+    if (m.in_battle && m.opponent) el(sid, "battle").textContent = `⚔ ${m.opponent}`;
+    if (sid === "a" && m.engine !== undefined) setEngineButtons(m.engine);
+  }
+}
+
+// ---- inputs: macOS Korean IME-safe Enter (send on compositionend) ----
+function wireInput(input, fn) {
+  let pending = false;
+  const fire = () => { const line = input.value; input.value = ""; fn(line); };
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.isComposing || e.keyCode === 229) { pending = true; return; }
+      fire();
+    } else pending = false;
+  });
+  input.addEventListener("compositionend", () => { if (pending) { pending = false; fire(); } });
+}
+
+// ---- leader-pane wiring (supporter sections wire their input when created) ----
+{
+  const sid = LEADER;
+  wireInput(el(sid, "cmd"), line => sendCmd(sid, line));
+  el(sid, "btn-connect").onclick = () => send({type: "connect", sid});
+  el(sid, "btn-quit").onclick = () => send({type: "quit", sid});
+  el(sid, "btn-disc").onclick = () => send({type: "disconnect", sid});
+  el(sid, "btn-engine").onclick = () => {
+    setEngineButtons(!engineOn);
+    send({type: "engine", enabled: engineOn, workflow: "travel"});
+  };
+  el(sid, "hunt-go").onclick = () => {
+    const sel = el(sid, "hunt-zone");
+    const chosen = Array.from(sel.selectedOptions).map(o => o.value).filter(v => v);
+    if (chosen.length > 1) send({type: "hunt_start", sid, targets: chosen});     // circuit
+    else send({type: "hunt_start", sid, target: chosen[0] || sel.value});        // single zone
+  };
+  el(sid, "route-go").onclick = () => send({type: "hunt_start", sid, target: el(sid, "hunt-route").value});
+  el(sid, "survey-reset").onclick = () => send({type: "survey_reset", sid});
+  // Route recording
+  el(sid, "rec-start").onclick = () => send({type: "record_start", sid});
+  el(sid, "rec-save").onclick = () => send({type: "record_stop", sid, name: el(sid, "rec-name").value});
+  el(sid, "rec-cancel").onclick = () => send({type: "record_cancel", sid});
+}
+el(LEADER, "cmd").focus();
+</script>
+</body>
+</html>

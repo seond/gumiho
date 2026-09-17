@@ -1,0 +1,10 @@
+name = "combo"
+# ALWAYS-ON (see [engine].always_reflexes): continue a 전사/검사/장군 연타 multi-strike
+# whenever a wind-up cue comes due mid-fight — regardless of the active workflow. A
+# battle can start (and its rounds be driven by the server) while we're resting,
+# travelling, or waiting, so this must not be gated by the hunting states. The guard
+# (`combo_continue` = fighting + eligible class + cue seen) is self-clearing, so it
+# never blocks the state machine when no combo is pending.
+reflex = [
+  { when = "combo_continue", do = "continue_combo", priority = 200 },
+]

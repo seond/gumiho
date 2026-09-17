@@ -1,0 +1,80 @@
+# Hunting map — 지하동굴
+name = "지하동굴"          # hunting-zone name (zone dropdown + the hunt target)
+start = "001"
+# No landmark re-sync in THIS zone. The re-sync snaps position to the arrival room whenever a
+# render shows `resync_exit`; the default "아래" is meant to be the ARRIVAL room's UNIQUE exit.
+# Here arrival 001 has only 남/동/서 (all common), while "아래" is rendered at the PORTAL room 007
+# — so the default would yank position back to 001 every time 007 shows (the "jumps back and
+# forth" bug). Empty disables it; dead-reckoning (note_move) + the hunt-arrival reset keep
+# position accurate on this small, exactly-mapped zone. (Other zones keep the default: their
+# "아래" is a genuine arrival-only landmark.)
+resync_exit = ""
+# 철면사냥: this zone's mobs deal too much physical damage to fight bare-handed. The 마법사
+# supporter keeps 철면 (physical immunity) on the leader — the leader only engages while it is
+# up, and the supporter re-casts the instant it fades. See [ironskin] in knowledge.toml.
+# ironskin = true
+# Mobs to NEVER attack in THIS zone (loaded when the hunt arrives). Tactically nasty to fight
+# even if beatable — the hunt walks past them, never targets them. 마왕 casts a BLIND that's
+# hard to recover from. A name here matches a target's keyword OR anywhere in its rendered line.
+# blacklist = ["마왕", "교황", "한웅천황"]
+# (scalars MUST sit above the [route]/[[matrix]] tables — a table header absorbs keys after it)
+
+[route]
+name = "지하동굴"          # route name (route dropdown)
+# Path FROM 중앙 광장 to the start room. Game commands: ㅂ=북 ㄴ=남 ㄷ=동 ㅅ=서, 위/아래, and
+# specials like "남대 열" (open the south gate). This is the travel route the hunt uses.
+steps = [
+    "ㅂ",
+    "ㅅ",
+    "ㅅ",
+    "훈 열",
+    "ㅅ",
+    "ㅅ",
+    "ㄴ",
+    "ㄴ",
+    "ㄴ",
+    "ㄷ",
+    "맨 열",
+    "아래",
+    "ㅂ",
+    "ㅂ",
+    "ㅅ",
+    "ㅅ",
+    "ㅅ",
+    "ㅅ",
+    "ㅂ",
+    "아래"
+  ]
+
+[[matrix]]
+name = "main"
+grid = [
+  "000 001 002 003 004",
+  "005 006 007 008 009",
+  "010 011 012 013 014"
+]
+
+[[matrix]]
+name = "underground"
+grid = [
+  "015 016 017",
+  "018 019 020",
+  "021 022 023"
+]
+
+# Portals
+# NOTE: zero-padded room ids must be QUOTED here — bare 000 is invalid TOML (leading zeros).
+# The engine coerces these with int(), so "000" and 0 are equivalent; quotes just let the ids
+# stay visually aligned with the zero-padded grid.
+
+[[portal]]
+from = "007"
+from_dir = "아래"
+to = "019"
+to_dir = "위"
+
+# [[door]]
+# room = "024"
+# dir = "위"
+# locked = false
+# name = "하늘"                 # open command = "위 하늘 열" ([dir] [door name] 열)
