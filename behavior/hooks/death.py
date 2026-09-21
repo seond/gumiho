@@ -83,7 +83,8 @@ def reequip_gear(s, cmd):
         slot = it.get("slot", "")
         if not name:
             continue
-        if slot in weapon_slots:
+        name = s.alias(name)          # registered keyword, de-engraved — the raw 장비
+        if slot in weapon_slots:      # name ('<우리>의 카타나') is not what 무장 accepts
             cmd.send(f"{name} {r.get('wield', '무장')}")
         elif slot in hold_slots:
             cmd.send(f"{name} {r.get('hold', '쥐어')}")

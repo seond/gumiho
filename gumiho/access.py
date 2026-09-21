@@ -43,6 +43,25 @@ def ironskin_predict(land: float, anchor: float, tick: float, base: float, nomin
 _NON_MOB_MARKERS = ("시체", "핏자국", "송장", "놓여", "떨어져", "오로라")
 
 
+def strip_engraving(name: str | None, owner: str | None) -> str | None:
+    """Drop the ENGRAVING prefix from an item name: an engraved item renders as
+    "<owner>의 소드브레이커" instead of plain "소드브레이커", and the server does NOT
+    register the engraved form — a command built from it ('...의 소드브레이커 수리')
+    is rejected. Strip it ONLY when the engraved name is the CHARACTER'S OWN, i.e.
+    the word before 의 equals `owner`; another player's engraved item is left alone.
+
+    Anchoring on the exact owner name is what makes this safe: plenty of item names
+    contain 의 on their own (기간테스의바지, 불사의 갑옷) and owner names can too
+    (현실의자각). Only the leading "<owner>의" — with or without the following space
+    — is removed, so "현실의자각의 블랙 레네게이드" -> "블랙 레네게이드"."""
+    if not name or not owner:
+        return name
+    prefix = owner + "의"
+    if not name.startswith(prefix):
+        return name
+    return name[len(prefix):].lstrip() or name    # never strip down to nothing
+
+
 def resolve_alias(aliases: dict, entity: str) -> tuple:
     """First [aliases] entry whose KEY appears as a SUBSTRING of `entity`, resolved
     to (name, kind). This lets a human take the whole row and declare BOTH the name
@@ -289,11 +308,19 @@ class CharCtx:
         line '기간테스의바지'), but some are registered under a shorter/other keyword
         ('기간'); the human records the mapping in knowledge [aliases]. ALWAYS run a
         parsed name through this before putting it in a command (repair '<n> 수리',
-        attack '<n> 공격', pickup …). Unmapped names pass through unchanged."""
+        attack '<n> 공격', pickup …). It ALSO de-engraves the name first (see
+        strip_engraving), so an engraved item needs no [aliases] entry at all unless
+        the server wants a SHORTER keyword than its bare name. Unmapped names pass
+        through unchanged (de-engraved)."""
         if not name:
             return name
-        val = self.knowledge.get("aliases", {}).get(name, name)
-        return val if isinstance(val, str) else name   # table-form entries: exact lookup is name-only
+        aliases = self.knowledge.get("aliases", {})
+        bare = strip_engraving(name, self.name)
+        for key in (name, bare):                       # engraved form first: a [aliases]
+            val = aliases.get(key)                     # entry written for it still wins
+            if isinstance(val, str):                   # (table-form entries: exact lookup
+                return val                             #  is name-only, so they fall through)
+        return bare                                    # no entry: the de-engraved name
 
     def entity_alias(self, entity: str) -> tuple:
         """(name, kind) declared for this entity row in [aliases] by substring, or

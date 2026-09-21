@@ -109,20 +109,20 @@ def test_parse():
     print("parse 장비 -> worn:", worn)
 
 
-def _mk(nav):
+def _mk(nav, name="영웅"):
     st = WorldState()
     st.apply(ev.Status(hp=(400, 400), mp=(100, 100), mv=(200, 200), job="전사"))
-    ctx = CharCtx("a", "leader", st, get_knowledge(), set(), name="영웅", now=now)
+    ctx = CharCtx("a", "leader", st, get_knowledge(), set(), name=name, now=now)
     ctx.nav = nav
     sent = []
     return ctx, sent, Engine(ctx, Cmd(sent.append), now=now)
 
 
-def _run(equipment, siru=5):
+def _run(equipment, siru=5, name="영웅"):
     """Run resupply to completion, injecting `equipment` when 장비 is issued and an
     inventory holding `siru` 시루떡 when 소지품 is issued (siru>=5 skips the 떡집 leg)."""
     routes = {"광장 사거리": ["남", "남"], "대장간": ["동"]}
-    ctx, sent, eng = _mk(lambda t: list(routes[t]) if t in routes else None)
+    ctx, sent, eng = _mk(lambda t: list(routes[t]) if t in routes else None, name=name)
     eng.boot("resupply")
     injected = inv_injected = False
     for _ in range(80):
@@ -223,6 +223,37 @@ def test_repair_uses_alias():
     print("repair uses alias: 기간테스의바지 -> 기간")
 
 
+def test_strip_engraving():
+    """An item engraved with the character's OWN name loses the '<name>의 ' prefix;
+    anyone ELSE's engraving, and plain names that merely CONTAIN 의, are untouched."""
+    from gumiho.access import strip_engraving as se
+    me = "플레이어제로"
+    assert se("플레이어제로의 소드브레이커", me) == "소드브레이커"
+    assert se("플레이어제로의 불사의 갑옷", me) == "불사의 갑옷"      # only the LEADING 의
+    assert se("현실의자각의 블랙 레네게이드", "현실의자각") == "블랙 레네게이드"  # 의 inside the NAME
+    assert se("플레이어제로의카타나", me) == "카타나"                 # engraved without a space
+    assert se("기간테스의바지", me) == "기간테스의바지"               # plain name containing 의
+    assert se("스튀르들뤼손의 스파이드", me) == "스튀르들뤼손의 스파이드"  # someone else's
+    assert se("플레이어제로의", me) == "플레이어제로의"               # never strip to nothing
+    assert se("소드브레이커", None) == "소드브레이커"                 # unknown owner: no-op
+    print("strip_engraving: own engraving dropped, others kept")
+
+
+def test_repair_de_engraves():
+    """Engraved gear needs NO [aliases] entry — the repair command uses the bare name.
+    Another player's engraving still goes through [aliases] unchanged."""
+    Reloader(lambda: []).load_all()
+    ctx, sent, eng = _run([
+        {"slot": "무기", "name": "플레이어제로의 새칼", "cur": 20, "max": 60},   # ours, unaliased
+        {"slot": "몸", "name": "객현국의 거불탄방패", "cur": 30, "max": 50},      # not ours, aliased
+    ], name="플레이어제로")
+    assert eng.enabled is False and ctx.cursor.sub == "done", ctx.cursor
+    assert "새칼 수리" in sent, f"engraved name must reduce to the bare one: {sent}"
+    assert "플레이어제로의 새칼 수리" not in sent, f"raw engraved name sent: {sent}"
+    assert "거불탄 수리" in sent, f"another player's engraving keeps its alias: {sent}"
+    print("repair de-engraves: 플레이어제로의 새칼 -> 새칼")
+
+
 def test_recall_persists():
     """Recall never lands -> NEVER give up (no dead-end halt). Keeps retrying 귀환
     indefinitely and stays enabled, so a later manual recall can still rescue it."""
@@ -249,5 +280,7 @@ if __name__ == "__main__":
     test_bakery_buys_when_short()
     test_bakery_skipped_when_stocked()
     test_repair_uses_alias()
+    test_strip_engraving()
+    test_repair_de_engraves()
     test_recall_persists()
     print("\nALL RESUPPLY TESTS PASSED")

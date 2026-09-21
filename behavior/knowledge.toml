@@ -14,6 +14,11 @@
 #                                  non-mob kinds are never attacked). name optional.
 #     First matching KEY wins, so use SPECIFIC substrings. A whole zone is taught by
 #     DATA here — never hardcoded. Configure by what you SEE in the line.
+# ENGRAVING is handled in code, NOT here: an item engraved with THIS character's
+# own name renders as "<내이름>의 소드브레이커" and is auto-reduced to "소드브레이커"
+# before any command (access.strip_engraving). Only add an entry when the server
+# wants a SHORTER keyword than the bare name (소드브레이커 -> 소드); key it on the
+# BARE name. The engraved keys below still win where present, but are redundant.
 [aliases]
 "기간테스의바지" = "기간"
 # Town/room FIXTURES that read like entities but are NOT mobs ("" = never a target).
@@ -241,7 +246,7 @@ rest_hp_pct  = 55          # in a 철면 zone the leader stops resting HP here. 
                            # Supporter MP still gates rest to full_pct (95%), banking a hunting burst.
 flee_hp_pct  = 25          # mid-fight with 철면 down: bail if HP drops below this % (even if the
                            # supporter still has MP — the cast isn't landing fast enough)
-fade_flee_hold = 6.0       # secs to HOLD after 철면 FADES mid-battle before the emergency starts to
+fade_flee_hold = 8.0       # secs to HOLD after 철면 FADES mid-battle before the emergency starts to
                            # 도망. The leader now has ample HP to tank a couple of hits, so this avoids
                            # a jumpy flee the instant 철면 lapses. Only the FIRST flee decision waits;
                            # a flee already in flight (fail-retry / grace) skips it. 0 disables.
